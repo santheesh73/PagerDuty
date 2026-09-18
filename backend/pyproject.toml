@@ -1,0 +1,56 @@
+[project]
+name = "incident-platform-backend"
+version = "0.1.0"
+description = "Incident Management Platform Backend"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.1.0,<5.2.0",
+    "djangorestframework>=3.15.2,<3.16.0",
+    "django-cors-headers>=4.4.0",
+    "psycopg[binary]>=3.2.0",
+    "redis>=5.0.8",
+    "celery>=5.4.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.2",
+    "pytest-django>=4.9.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.6.3",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.dev"
+python_files = ["test_*.py", "*_test.py"]
+pythonpath = ["."]
+testpaths = ["tests", "apps"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by line-length)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "apps"]
