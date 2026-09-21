@@ -82,6 +82,8 @@ class IncidentEvent(models.Model):
     class EventType(models.TextChoices):
         INCIDENT_TRIGGERED = "INCIDENT_TRIGGERED", "Incident Triggered"
         ALERT_ATTACHED = "ALERT_ATTACHED", "Alert Attached"
+        RESPONDER_ASSIGNED = "RESPONDER_ASSIGNED", "Responder Assigned"
+        ROUTING_UNAVAILABLE = "ROUTING_UNAVAILABLE", "Routing Unavailable"
         INCIDENT_ACKNOWLEDGED = "INCIDENT_ACKNOWLEDGED", "Incident Acknowledged"
         INCIDENT_RESOLVED = "INCIDENT_RESOLVED", "Incident Resolved"
         INCIDENT_REOPENED = "INCIDENT_REOPENED", "Incident Reopened"
