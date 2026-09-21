@@ -365,32 +365,102 @@ npm run build
 - **Celery Tasks & Asynchronous Orchestration**:
   - `dispatch_notification(notification_id)`: Asynchronously delivers messages via provider with bounded retries (`max_retries=3`). Commits DB attempt updates before raising Celery retry to avoid rollback of failure history.
   - `check_and_escalate(incident_id, expected_level_id, expected_generation)`: Delayed Celery task scheduled via `transaction.on_commit(countdown=wait_minutes * 60)`.
-    - **Concurrency & Idempotency Safeguards**:
-      1. Live state reload under atomic row lock (`select_for_update()`).
-      2. Status check: Exits harmlessly if status is not `TRIGGERED` (acknowledgement or resolution halts escalation cleanly without Celery task cancellation).
-      3. Generation check: Exits harmlessly if `incident.automation_generation != expected_generation` (invalidates stale tasks from prior reopen cycles).
-      4. Expected-level guard: Exits harmlessly if `incident.current_escalation_level_id != expected_level_id` (prevents duplicate worker executions from skipping levels).
-      5. Final-level exhaustion: If no further levels exist, appends `ESCALATION_EXHAUSTED` event exactly once and halts without re-wrapping or erroring.
-- **Timeline Audit Entries**: Added `ESCALATION_STARTED`, `INCIDENT_ESCALATED`, `ESCALATION_EXHAUSTED`, and `ESCALATION_TARGET_UNAVAILABLE` to `IncidentEvent.EventType`.
-- **Lifecycle Transitions**:
-  - `reopen_incident`: Explicitly transitions `RESOLVED -> TRIGGERED`, increments `automation_generation += 1`, resets `current_escalation_level = Level 1`, and restarts escalation automation.
-- **REST Endpoints**:
-  - `GET /api/escalation-policies/` (supports `?team=<id>`, `?is_active=<true|false>`)
-  - `POST /api/escalation-policies/`
-  - `GET /api/escalation-policies/{id}/`
-  - `PATCH /api/escalation-policies/{id}/`
-  - `GET /api/escalation-levels/` (supports `?policy=<id>`, `?target_type=<type>`)
-  - `POST /api/escalation-levels/`
-  - `GET /api/escalation-levels/{id}/`
-  - `PATCH /api/escalation-levels/{id}/`
-  - `GET /api/notifications/` (read-only, supports `?incident=<id>`, `?recipient=<id>`, `?status=<PENDING|SENT|FAILED>`, `?channel=EMAIL`)
-  - `GET /api/notifications/{id}/`
-  - `POST /api/notifications/{id}/retry/` (re-enqueues FAILED notifications)
-- **Admin & Demo Data**:
-  - Registered `EscalationPolicy` (with `EscalationLevelInline`), `EscalationLevel`, and `Notification` in Django admin.
-  - Extended `seed_demo` with `Backend Critical Policy` (Level 1: CURRENT_ON_CALL, wait 5 min; Level 2: Bob, wait 10 min) linked to `Payment API`.
+    - Concurrency & Idempotency Safeguards: Live state reload under atomic row lock (`select_for_update()`), status check, generation check, expected-level guard, and clean final-level exhaustion.
+- **REST Endpoints**: `/api/escalation-policies/`, `/api/escalation-levels/`, `/api/notifications/` with manual retry.
 
-### Next Phase:
-- Phase 6 — Frontend Foundation (application shell, routing, typed API client, TanStack Query integration, shared components, loading/error states)
-- Phase 7 — Analytics & Metrics (MTTA/MTTR calculations)
+**Phase 6 — Frontend Foundation (Complete)**
+- **Application Shell & Responsive Layout**:
+  - `AppLayout`: Clean, operations-grade workbench shell composed of `Sidebar`, `TopBar`, and `PageContainer`.
+  - `Sidebar`: Semantic `<nav>` containing client-side navigation links (`Dashboard`, `Incidents`, `Services`, `On-call`, `Escalation Policies`, `Analytics`) with Lucide icons and active route indicators.
+  - `TopBar`: Operations header displaying subtle, live backend connectivity status (`Connected` vs `Unavailable`) powered by `useHealth()`.
+  - `PageContainer`: Constrained, responsive layout wrapper with accessible semantic landmarks.
+- **Client-Side SPA Routing (React Router v7)**:
+  - `/` -> `Dashboard` (Placeholder: Phase 7 operational metrics and active incident view)
+  - `/incidents` -> `Incidents` (Placeholder: Phase 7 incident list and filtering)
+  - `/incidents/:incidentId` -> `IncidentDetail` (Placeholder: Phase 7 incident triage, actions, and event timeline)
+  - `/services` -> `Services` (Placeholder: Phase 8 service registry and health monitoring)
+  - `/on-call` -> `OnCallSchedule` (Placeholder: Phase 8 shift rotations and schedule overrides)
+  - `/escalation-policies` -> `EscalationPolicies` (Placeholder: Phase 8 multi-level escalation policy editor)
+  - `/analytics` -> `Analytics` (Placeholder: Phase 8 MTTA/MTTR calculations and volume reports)
+  - `*` -> `NotFound` (Recoverable 404 page with navigation back to Dashboard)
+  - *Note*: Operational screens are intentionally implemented in Phases 7 and 8. No mock data or fake metrics are rendered.
+- **Typed API Client & Django Integration**:
+  - Centralized HTTP abstraction (`src/api/client.ts`) utilizing native `fetch` with `credentials: "include"` for Django session auth.
+  - Environment-driven base URL: `VITE_API_BASE_URL` (defaults to `http://localhost:8000/api`).
+  - Automatic CSRF token handling: Extracts `csrftoken` cookie and attaches `X-CSRFToken` header for mutation requests (`POST`, `PUT`, `PATCH`, `DELETE`).
+  - Structured error normalization: Parses DRF responses (`{ detail: "..." }`, `{ field: ["..."] }`, `{ non_field_errors: [...] }`) into a typed `ApiError` class with `status`, `message`, and `fieldErrors`.
+- **Domain API Modules & Exact DRF Types**:
+  - `api/health.ts`: Backend dependency health checks (`database`, `redis`).
+  - `api/incidents.ts`: `getIncidents`, `getIncident`, `getIncidentEvents`, `acknowledgeIncident`, `resolveIncident`, `reopenIncident`.
+  - `api/services.ts`: `getServices`, `getService`.
+  - `api/schedules.ts`: `getSchedules`, `getSchedule`, `getScheduleRotations`, `getCurrentOnCall`.
+  - `api/escalationPolicies.ts`: `getEscalationPolicies`, `getEscalationPolicy`, `getEscalationLevels`.
+  - `api/notifications.ts`: `getNotifications`, `getNotification`, `retryNotification`.
+  - TypeScript types (`src/types/`) faithfully mirror Django REST Framework serializers and model choices, preserving nullability without business logic embedding.
+- **Server State & TanStack Query Configuration**:
+  - Centralized `QueryClient` (`src/app/queryClient.ts`) with sensible defaults (`staleTime: 30_000`, `retry: 1`, `refetchOnWindowFocus: true`, `mutations: { retry: false }`).
+  - Predictable `queryKeys` constants for all system domains.
+  - No global frequent polling (reserved for targeted Phase 7 active incident views).
+- **Shared Primitive Design System Components**:
+  - `Badge`: Reusable badge with variants (`success`, `warning`, `error`, `neutral`, `info`).
+  - `Button`: Semantic button with variants (`primary`, `secondary`, `destructive`, `outline`, `ghost`), sizes (`sm`, `md`, `lg`), and loading indicators.
+  - `Card`: Reusable card with header, subtitle, and action slots.
+  - `PageHeader`: Standard page title, description, badge, and action bar.
+  - `LoadingState`: Accessible loading spinner (`role="status"`, `aria-live="polite"`).
+  - `ErrorState`: Error card with title, message, and retry button (`role="alert"`).
+  - `EmptyState`: Empty state illustration, description, and action button.
+  - `StatusBadge`: Maps backend `triggered`, `acknowledged`, `resolved` to presentation styles without altering domain values.
+  - `SeverityBadge`: Maps backend `low`, `medium`, `high`, `critical`.
+  - `ErrorBoundary`: Application-level error boundary capturing rendering faults with a recoverable reload interface.
+- **Date/Time Formatting**:
+  - Native `Intl` utilities (`src/lib/format.ts`): `formatDateTime`, `formatRelativeTime`, `formatDuration`. Pure display formatting without schedule calculation logic.
+- **Testing Infrastructure**:
+  - `renderWithProviders` helper wrapping `QueryClientProvider`, `MemoryRouter`, and `ErrorBoundary`.
+  - Comprehensive unit and integration tests across API client, router, navigation, health indicator, error boundary, and formatting.
+  - Vitest: **28 passed / 0 failed** across 8 test suites.
+
+---
+
+## 5. Development & Testing Commands
+
+### Backend Commands:
+```bash
+# Run system checks
+python manage.py check
+
+# Run migrations check
+python manage.py makemigrations --check
+
+# Execute backend tests
+pytest
+```
+
+### Frontend Commands:
+```bash
+# Typecheck TypeScript
+npm run typecheck
+
+# Lint source code
+npm run lint
+
+# Run Vitest test suite
+npm test
+
+# Build production bundle
+npm run build
+```
+
+---
+
+## 6. Project Roadmap
+
+- [x] **Phase 0 — Project Skeleton & Infrastructure**
+- [x] **Phase 1 — Identity & Teams Domain**
+- [x] **Phase 2 — Services & Alert Ingestion**
+- [x] **Phase 3 — Incident Engine & Deduplication**
+- [x] **Phase 4 — Scheduling & Routing**
+- [x] **Phase 5 — Escalation, Notifications & Backend Automation**
+- [x] **Phase 6 — Frontend Foundation**
+- [ ] **Phase 7 — Operations Frontend** (Live Dashboard, Incident Workbench, Incident Detail, Actions & Timeline)
+- [ ] **Phase 8 — Platform Configuration & Analytics** (Service Registry, Schedule Editor, Escalation Policy Editor, MTTA/MTTR Analytics)
 

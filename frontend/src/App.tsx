@@ -1,28 +1,17 @@
-import React, { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StatusPage } from './pages/StatusPage';
+import React from 'react';
+import { QueryClient } from '@tanstack/react-query';
+import { AppProviders } from './app/providers';
+import { AppRoutes } from './app/router';
 
 export interface AppProps {
   client?: QueryClient;
 }
 
-const createDefaultQueryClient = () =>
-  new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        refetchOnWindowFocus: false,
-      },
-    },
-  });
-
 export const App: React.FC<AppProps> = ({ client }) => {
-  const [queryClient] = useState(() => client || createDefaultQueryClient());
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusPage />
-    </QueryClientProvider>
+    <AppProviders queryClient={client}>
+      <AppRoutes />
+    </AppProviders>
   );
 };
 

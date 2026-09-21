@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import App from './App';
 
-describe('App Component', () => {
+describe('App Root Component', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
@@ -18,19 +18,31 @@ describe('App Component', () => {
     });
   });
 
-  it('renders the application shell and header', () => {
-    // Mock fetch that never resolves to test loading
+  it('renders the complete application shell, sidebar, and dashboard', () => {
     global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
 
     render(<App client={queryClient} />);
 
-    expect(screen.getByText('Incident Management Platform')).toBeInTheDocument();
-    expect(screen.getByText(/Phase: 0 — Skeleton/i)).toBeInTheDocument();
-    expect(screen.getByText('System Connectivity')).toBeInTheDocument();
+    // Brand and platform title
+    expect(screen.getByText('IncidentPlatform')).toBeInTheDocument();
+    expect(screen.getByText('Core Workbench')).toBeInTheDocument();
+
+    // Navigation links in Sidebar
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Incidents' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Services' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'On-call' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Escalation Policies' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Analytics' })).toBeInTheDocument();
+
+    // Default route content (Dashboard)
+    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Phase 7/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Operational Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Connecting...')).toBeInTheDocument();
   });
 
-  it('displays Connected when backend returns healthy status', async () => {
+  it('displays Connected badge when backend returns healthy status', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -47,12 +59,9 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Connected')).toBeInTheDocument();
     });
-
-    expect(screen.getByText('database')).toBeInTheDocument();
-    expect(screen.getByText('redis')).toBeInTheDocument();
   });
 
-  it('displays Unavailable when backend health check fails', async () => {
+  it('displays Unavailable badge when backend health check fails', async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('Network connection failed'));
 
     render(<App client={queryClient} />);
@@ -60,7 +69,5 @@ describe('App Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Unavailable')).toBeInTheDocument();
     });
-
-    expect(screen.getByText(/Network connection failed/i)).toBeInTheDocument();
   });
 });
