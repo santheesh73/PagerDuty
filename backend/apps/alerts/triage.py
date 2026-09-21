@@ -123,9 +123,9 @@ def triage_alert(alert: "Alert") -> "Incident":
         )
 
         if is_new_incident:
-            from apps.scheduling.services import assign_incident_on_creation
+            from apps.escalation.services import start_incident_escalation
 
-            assign_incident_on_creation(incident, incident.triggered_at)
+            start_incident_escalation(incident, incident.triggered_at)
 
         return incident
 

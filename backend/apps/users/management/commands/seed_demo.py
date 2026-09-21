@@ -173,5 +173,67 @@ class Command(BaseCommand):
             action = "Created" if created else "Ensured"
             self.stdout.write(f"  - {action} rotation: {rot}")
 
+        # 6. Escalation Policies & Levels (Phase 5)
+        from apps.escalation.models import EscalationLevel, EscalationPolicy
+
+        backend_policy, created = EscalationPolicy.objects.get_or_create(
+            slug="backend-critical-policy",
+            defaults={
+                "name": "Backend Critical Policy",
+                "team": teams["backend"],
+                "is_active": True,
+            },
+        )
+        if not created:
+            backend_policy.name = "Backend Critical Policy"
+            backend_policy.team = teams["backend"]
+            backend_policy.is_active = True
+            backend_policy.save()
+        action = "Created" if created else "Ensured"
+        self.stdout.write(f"  - {action} escalation policy: {backend_policy.name}")
+
+        # Level 1: Current On-Call (wait 5 mins)
+        level_1, created = EscalationLevel.objects.get_or_create(
+            policy=backend_policy,
+            order=1,
+            defaults={
+                "target_type": EscalationLevel.TargetType.CURRENT_ON_CALL,
+                "target_user": None,
+                "wait_minutes": 5,
+            },
+        )
+        if not created:
+            level_1.target_type = EscalationLevel.TargetType.CURRENT_ON_CALL
+            level_1.target_user = None
+            level_1.wait_minutes = 5
+            level_1.save()
+        action = "Created" if created else "Ensured"
+        self.stdout.write(f"  - {action} level 1: {level_1}")
+
+        # Level 2: Bob (User target, wait 10 mins)
+        level_2, created = EscalationLevel.objects.get_or_create(
+            policy=backend_policy,
+            order=2,
+            defaults={
+                "target_type": EscalationLevel.TargetType.USER,
+                "target_user": users["bob"],
+                "wait_minutes": 10,
+            },
+        )
+        if not created:
+            level_2.target_type = EscalationLevel.TargetType.USER
+            level_2.target_user = users["bob"]
+            level_2.wait_minutes = 10
+            level_2.save()
+        action = "Created" if created else "Ensured"
+        self.stdout.write(f"  - {action} level 2: {level_2}")
+
+        # Link Payment API service to backend critical policy
+        payment_service = Service.objects.filter(slug="payment-api").first()
+        if payment_service:
+            payment_service.escalation_policy = backend_policy
+            payment_service.save(update_fields=["escalation_policy"])
+            self.stdout.write(f"  - Linked Payment API to {backend_policy.name}")
+
         self.stdout.write(self.style.SUCCESS("Successfully seeded demo data."))
 

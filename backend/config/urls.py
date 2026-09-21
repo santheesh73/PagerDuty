@@ -52,6 +52,8 @@ api_patterns = [
     path("", include("apps.alerts.urls")),
     path("", include("apps.incidents.urls")),
     path("", include("apps.scheduling.urls")),
+    path("", include("apps.escalation.urls")),
+    path("", include("apps.notifications.urls")),
 ]
 
 urlpatterns = [

@@ -170,6 +170,8 @@ def reopen_incident(
         locked_incident.triggered_at = timezone.now()
         locked_incident.acknowledged_at = None
         locked_incident.resolved_at = None
+        locked_incident.current_escalation_level = None
+        locked_incident.automation_generation += 1
 
         try:
             locked_incident.save(
@@ -178,6 +180,8 @@ def reopen_incident(
                     "triggered_at",
                     "acknowledged_at",
                     "resolved_at",
+                    "current_escalation_level",
+                    "automation_generation",
                     "updated_at",
                 ]
             )
@@ -192,5 +196,10 @@ def reopen_incident(
             actor=user,
             metadata=metadata,
         )
+
+        if locked_incident.service.escalation_policy_id:
+            from apps.escalation.services import start_incident_escalation
+
+            start_incident_escalation(locked_incident, locked_incident.triggered_at)
 
         return locked_incident

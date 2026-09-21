@@ -348,9 +348,49 @@ npm run build
   - Registered `Schedule` and `ScheduleRotation` in Django admin.
   - Extended `python manage.py seed_demo` to seed `Backend Primary` schedule with base rotations for Alice and Bob, plus an override.
 
-### Not Yet Implemented:
-- EscalationPolicy & EscalationLevel (Phase 5)
-- Celery escalation timers & delayed workflows (Phase 5)
-- Notification delivery & multi-channel dispatch (Phase 6)
-- Analytics & MTTA/MTTR metrics (Phase 7)
-- Operational frontend dashboard & pages (Phase 8+)
+**Phase 5 — Escalation, Notifications & Backend Automation (Complete)**
+- **EscalationPolicy & EscalationLevel Models**:
+  - `EscalationPolicy`: Tiered operational escalation policy owned by a `Team` (`name`, `slug`, `team`, `is_active`).
+  - `EscalationLevel`: Step within a policy defining target type (`CURRENT_ON_CALL` or `USER`), `target_user` (validated active member of policy team), and `wait_minutes` (non-negative delay before subsequent escalation).
+  - **Database Constraints**: `UniqueConstraint(fields=["policy", "order"], name="unique_policy_level_order")` enforcing strict sequential ordering. Deletion protection (`on_delete=models.PROTECT`) prevents destroying active incident escalation paths.
+- **Service Integration**: Added `Service.escalation_policy` foreign key with `on_delete=models.PROTECT`.
+- **Durable Incident Escalation State**:
+  - `Incident.current_escalation_level`: Points to the active `EscalationLevel`.
+  - `Incident.automation_generation`: Monotonically increasing version (`PositiveIntegerField(default=1)`) incremented on incident reopen to prevent stale asynchronous tasks from older lifecycles from mutating reopened incidents.
+- **Notification Domain & Provider Abstraction**:
+  - `Notification` model: Durable, auditable record tracking dispatch status (`PENDING`, `SENT`, `FAILED`), delivery attempts (`attempt_count`), timestamps (`sent_at`, `failed_at`), and `last_error`.
+  - **Deterministic Idempotency Key**: `dedupe_key = f"inc:{incident.id}:lvl:{level_id}:gen:{generation}:usr:{recipient_id}:ch:{channel}"` backed by a database unique constraint. Prevents duplicate notifications during Celery retries or concurrent dispatches.
+  - `BaseNotificationProvider`: Extensible interface decoupling orchestration from external vendor SDKs.
+  - `SimulatedEmailProvider`: In-memory simulated email delivery with deterministic fault injection capabilities. Intentionally does NOT connect to real external SMTP/SendGrid/Twilio.
+- **Celery Tasks & Asynchronous Orchestration**:
+  - `dispatch_notification(notification_id)`: Asynchronously delivers messages via provider with bounded retries (`max_retries=3`). Commits DB attempt updates before raising Celery retry to avoid rollback of failure history.
+  - `check_and_escalate(incident_id, expected_level_id, expected_generation)`: Delayed Celery task scheduled via `transaction.on_commit(countdown=wait_minutes * 60)`.
+    - **Concurrency & Idempotency Safeguards**:
+      1. Live state reload under atomic row lock (`select_for_update()`).
+      2. Status check: Exits harmlessly if status is not `TRIGGERED` (acknowledgement or resolution halts escalation cleanly without Celery task cancellation).
+      3. Generation check: Exits harmlessly if `incident.automation_generation != expected_generation` (invalidates stale tasks from prior reopen cycles).
+      4. Expected-level guard: Exits harmlessly if `incident.current_escalation_level_id != expected_level_id` (prevents duplicate worker executions from skipping levels).
+      5. Final-level exhaustion: If no further levels exist, appends `ESCALATION_EXHAUSTED` event exactly once and halts without re-wrapping or erroring.
+- **Timeline Audit Entries**: Added `ESCALATION_STARTED`, `INCIDENT_ESCALATED`, `ESCALATION_EXHAUSTED`, and `ESCALATION_TARGET_UNAVAILABLE` to `IncidentEvent.EventType`.
+- **Lifecycle Transitions**:
+  - `reopen_incident`: Explicitly transitions `RESOLVED -> TRIGGERED`, increments `automation_generation += 1`, resets `current_escalation_level = Level 1`, and restarts escalation automation.
+- **REST Endpoints**:
+  - `GET /api/escalation-policies/` (supports `?team=<id>`, `?is_active=<true|false>`)
+  - `POST /api/escalation-policies/`
+  - `GET /api/escalation-policies/{id}/`
+  - `PATCH /api/escalation-policies/{id}/`
+  - `GET /api/escalation-levels/` (supports `?policy=<id>`, `?target_type=<type>`)
+  - `POST /api/escalation-levels/`
+  - `GET /api/escalation-levels/{id}/`
+  - `PATCH /api/escalation-levels/{id}/`
+  - `GET /api/notifications/` (read-only, supports `?incident=<id>`, `?recipient=<id>`, `?status=<PENDING|SENT|FAILED>`, `?channel=EMAIL`)
+  - `GET /api/notifications/{id}/`
+  - `POST /api/notifications/{id}/retry/` (re-enqueues FAILED notifications)
+- **Admin & Demo Data**:
+  - Registered `EscalationPolicy` (with `EscalationLevelInline`), `EscalationLevel`, and `Notification` in Django admin.
+  - Extended `seed_demo` with `Backend Critical Policy` (Level 1: CURRENT_ON_CALL, wait 5 min; Level 2: Bob, wait 10 min) linked to `Payment API`.
+
+### Next Phase:
+- Phase 6 — Frontend Foundation (application shell, routing, typed API client, TanStack Query integration, shared components, loading/error states)
+- Phase 7 — Analytics & Metrics (MTTA/MTTR calculations)
+
