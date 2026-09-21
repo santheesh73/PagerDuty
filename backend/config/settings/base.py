@@ -123,6 +123,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Custom User Model
+AUTH_USER_MODEL = "users.User"
+
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [

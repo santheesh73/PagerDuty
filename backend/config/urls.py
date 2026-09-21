@@ -47,6 +47,7 @@ def health_check(request):
 # Root API URL patterns
 api_patterns = [
     path("health/", health_check, name="health_check"),
+    path("", include("apps.users.urls")),
 ]
 
 urlpatterns = [

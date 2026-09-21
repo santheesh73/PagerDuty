@@ -237,13 +237,32 @@ npm run build
 - Health endpoint (`GET /api/health/`) operational and bound to frontend status UI.
 - Automated tests, linting, typechecking, and Docker Compose stack validated.
 
+**Phase 1 — Users, Teams & Identity Domain (Complete)**
+- **Custom User Model**: Custom `User` extending `AbstractUser` configured via `AUTH_USER_MODEL = "users.User"`.
+- **Team Model**: Operational ownership group with unique slug and active toggle.
+- **TeamMembership Model**: Explicit join model linking `User` and `Team` with role assignment.
+  - **Role Choices**: `ENGINEER`, `LEAD`, `RESPONDER`.
+  - **Constraints**: Database-enforced `UniqueConstraint(fields=["user", "team"], name="unique_user_team_membership")`.
+- **Deletion Policy**: Soft-deactivation preferred (`is_active = False`) to preserve historical auditability across incident timelines.
+- **REST Endpoints**:
+  - `GET /api/users/` (supports `?team=<team_id>`)
+  - `GET /api/users/{id}/`
+  - `GET /api/teams/` (annotated with `member_count`, supports `?is_active=true`)
+  - `POST /api/teams/`
+  - `GET /api/teams/{id}/`
+  - `PATCH /api/teams/{id}/`
+  - `GET /api/teams/{id}/members/` (supports `?is_active=true`)
+  - `POST /api/team-memberships/`
+  - `PATCH /api/team-memberships/{id}/`
+  - `DELETE /api/team-memberships/{id}/` (soft-deactivates)
+- **Demo Data Management**: Idempotent seeding command `python manage.py seed_demo`.
+
 ### Not Yet Implemented:
-- users/teams functionality
-- service management
-- alert ingestion
-- incident lifecycle
-- scheduling
-- escalation
-- notifications
-- analytics
-- operational frontend
+- service management (Phase 2)
+- alert ingestion & triage (Phase 2)
+- incident lifecycle (Phase 3)
+- scheduling & rotations (Phase 4)
+- escalation policies (Phase 5)
+- notifications dispatch (Phase 6)
+- analytics & MTTA/MTTR (Phase 7)
+- operational frontend (Phase 8+)
