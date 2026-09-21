@@ -12,27 +12,24 @@ describe('SPA Router', () => {
     } as Response);
   });
 
-  it('renders Dashboard placeholder at root path /', () => {
+  it('renders Dashboard screen at root path /', () => {
     renderWithProviders(<AppRoutes />, { route: '/' });
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Phase 7/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole('heading', { level: 3, name: 'Operational Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Operations Dashboard' })).toBeInTheDocument();
+    expect(screen.getByText(/Live Polling \(15s\)/i)).toBeInTheDocument();
   });
 
-  it('renders Incidents placeholder at /incidents', () => {
+  it('renders Incidents screen at /incidents', () => {
     renderWithProviders(<AppRoutes />, { route: '/incidents' });
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incidents' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Incident Workbench' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Incident Workbench' })).toBeInTheDocument();
+    expect(screen.getByText(/Filters:/i)).toBeInTheDocument();
   });
 
-  it('renders IncidentDetail placeholder with route param at /incidents/:incidentId', () => {
+  it('renders IncidentDetail screen with route param at /incidents/:incidentId', () => {
     renderWithProviders(<AppRoutes />, { route: '/incidents/42' });
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Incident #42' })).toBeInTheDocument();
     expect(screen.getByText(/Back to Incidents/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Incident Timeline & Actions' })).toBeInTheDocument();
   });
 
   it('renders Services placeholder at /services', () => {

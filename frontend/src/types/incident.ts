@@ -27,9 +27,11 @@ export interface Incident {
   alert_count: number;
   created_at: string;
   updated_at: string;
+  current_escalation_level?: number | null;
 }
 
 export type IncidentEventType =
+  | 'INCIDENT_TRIGGERED'
   | 'INCIDENT_CREATED'
   | 'INCIDENT_ACKNOWLEDGED'
   | 'INCIDENT_RESOLVED'

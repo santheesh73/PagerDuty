@@ -36,9 +36,7 @@ describe('App Root Component', () => {
     expect(screen.getByRole('link', { name: 'Analytics' })).toBeInTheDocument();
 
     // Default route content (Dashboard)
-    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Phase 7/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Operational Dashboard')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Operations Dashboard' })).toBeInTheDocument();
     expect(screen.getByText('Connecting...')).toBeInTheDocument();
   });
 

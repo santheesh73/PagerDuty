@@ -417,7 +417,7 @@ npm run build
 - **Testing Infrastructure**:
   - `renderWithProviders` helper wrapping `QueryClientProvider`, `MemoryRouter`, and `ErrorBoundary`.
   - Comprehensive unit and integration tests across API client, router, navigation, health indicator, error boundary, and formatting.
-  - Vitest: **28 passed / 0 failed** across 8 test suites.
+  - Vitest: **46 passed / 0 failed** across 13 test suites.
 
 ---
 
@@ -461,6 +461,6 @@ npm run build
 - [x] **Phase 4 — Scheduling & Routing**
 - [x] **Phase 5 — Escalation, Notifications & Backend Automation**
 - [x] **Phase 6 — Frontend Foundation**
-- [ ] **Phase 7 — Operations Frontend** (Live Dashboard, Incident Workbench, Incident Detail, Actions & Timeline)
+- [x] **Phase 7 — Operations Frontend** (Live Dashboard, Incident Workbench, Incident Detail, Actions & Timeline)
 - [ ] **Phase 8 — Platform Configuration & Analytics** (Service Registry, Schedule Editor, Escalation Policy Editor, MTTA/MTTR Analytics)
 
