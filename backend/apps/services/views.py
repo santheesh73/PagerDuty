@@ -11,7 +11,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
     Supports filtering by team, status, and active state.
     """
 
-    queryset = Service.objects.select_related("team").all().order_by("name")
+    queryset = Service.objects.select_related("team", "escalation_policy").all().order_by("name")
     serializer_class = ServiceSerializer
     permission_classes = [AllowAny]
     http_method_names = ["get", "post", "patch", "head", "options"]

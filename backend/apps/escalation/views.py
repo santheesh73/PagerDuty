@@ -1,4 +1,7 @@
-from rest_framework import permissions, viewsets
+from rest_framework import permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db import transaction
 
 from .models import EscalationLevel, EscalationPolicy
 from .serializers import EscalationLevelSerializer, EscalationPolicySerializer
@@ -34,6 +37,34 @@ class EscalationPolicyViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    @action(detail=True, methods=["post"], url_path="reorder-levels")
+    def reorder_levels(self, request, pk=None):
+        policy = self.get_object()
+        level_ids = request.data.get("level_ids")
+        if not isinstance(level_ids, list):
+            return Response(
+                {"detail": "Expected 'level_ids' list of integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_levels = list(policy.levels.all())
+        existing_ids = {l.id for l in existing_levels}
+        if set(level_ids) != existing_ids:
+            return Response(
+                {"detail": "level_ids must contain exactly the existing levels for this policy."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Atomically update order to avoid unique_policy_level_order constraint violation
+        with transaction.atomic():
+            for idx, level_id in enumerate(level_ids, start=1):
+                EscalationLevel.objects.filter(id=level_id).update(order=1000 + idx)
+            for idx, level_id in enumerate(level_ids, start=1):
+                EscalationLevel.objects.filter(id=level_id).update(order=idx)
+
+        policy.refresh_from_db()
+        return Response(EscalationPolicySerializer(policy).data)
+
 
 class EscalationLevelViewSet(viewsets.ModelViewSet):
     """
@@ -48,7 +79,7 @@ class EscalationLevelViewSet(viewsets.ModelViewSet):
     )
     serializer_class = EscalationLevelSerializer
     permission_classes = [permissions.AllowAny]
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         qs = super().get_queryset()
