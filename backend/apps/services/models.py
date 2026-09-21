@@ -19,6 +19,13 @@ class Service(models.Model):
         on_delete=models.CASCADE,
         related_name="services",
     )
+    escalation_policy = models.ForeignKey(
+        "escalation.EscalationPolicy",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="services",
+    )
     status = models.CharField(
         max_length=32,
         choices=Status.choices,

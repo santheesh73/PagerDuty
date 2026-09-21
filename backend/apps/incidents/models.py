@@ -45,6 +45,17 @@ class Incident(models.Model):
         on_delete=models.SET_NULL,
         related_name="assigned_incidents",
     )
+    current_escalation_level = models.ForeignKey(
+        "escalation.EscalationLevel",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="incidents",
+    )
+    automation_generation = models.PositiveIntegerField(
+        default=1,
+        help_text="Lifecycle version incremented on reopen to invalidate stale asynchronous automation tasks.",
+    )
     triggered_at = models.DateTimeField(default=timezone.now)
     acknowledged_at = models.DateTimeField(null=True, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -67,6 +78,7 @@ class Incident(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["triggered_at"]),
             models.Index(fields=["resolved_at"]),
+            models.Index(fields=["current_escalation_level"]),
         ]
 
     def __str__(self) -> str:
@@ -87,6 +99,10 @@ class IncidentEvent(models.Model):
         INCIDENT_ACKNOWLEDGED = "INCIDENT_ACKNOWLEDGED", "Incident Acknowledged"
         INCIDENT_RESOLVED = "INCIDENT_RESOLVED", "Incident Resolved"
         INCIDENT_REOPENED = "INCIDENT_REOPENED", "Incident Reopened"
+        ESCALATION_STARTED = "ESCALATION_STARTED", "Escalation Started"
+        INCIDENT_ESCALATED = "INCIDENT_ESCALATED", "Incident Escalated"
+        ESCALATION_EXHAUSTED = "ESCALATION_EXHAUSTED", "Escalation Exhausted"
+        ESCALATION_TARGET_UNAVAILABLE = "ESCALATION_TARGET_UNAVAILABLE", "Escalation Target Unavailable"
 
     incident = models.ForeignKey(
         "incidents.Incident",
