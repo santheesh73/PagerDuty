@@ -22,5 +22,8 @@ if os.environ.get("DJANGO_USE_SQLITE", "False").lower() in ("true", "1", "yes"):
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {
+                "timeout": 20,
+            },
         }
     }

@@ -40,13 +40,14 @@ def test_valid_alert_ingestion(client, service):
     assert len(data["fingerprint"]) == 64
     assert data["received_at"] is not None
     assert data["metadata"]["cluster"] == "us-east-1"
+    assert data["incident_id"] is not None
 
 
 @pytest.mark.django_db
 def test_duplicate_alert_ingestion_generates_matching_fingerprint(client, service):
     """
-    Verify that identical alerts sent twice are both persisted (Phase 2)
-    and produce the exact same fingerprint (in preparation for Phase 3).
+    Verify that identical alerts sent twice are both persisted
+    and attach to the exact same active incident.
     """
     url = reverse("api:alert-list")
     payload = {
@@ -67,6 +68,8 @@ def test_duplicate_alert_ingestion_generates_matching_fingerprint(client, servic
     assert alert1["id"] != alert2["id"]
     assert alert1["fingerprint"] == alert2["fingerprint"]
     assert Alert.objects.count() == 2
+    assert alert1["incident_id"] is not None
+    assert alert1["incident_id"] == alert2["incident_id"]
 
 
 @pytest.mark.django_db
@@ -175,3 +178,126 @@ def test_phase_2_acceptance_scenario(client):
     )
     assert bad_sev_resp.status_code == 400
     assert "severity" in bad_sev_resp.json()
+
+
+@pytest.mark.django_db
+def test_phase_3_golden_acceptance_scenario(client):
+    """
+    Section 56: Golden Phase 3 Acceptance Scenario.
+    Steps:
+    1. POST /api/alerts/ -> Alert #1 created, Incident #1 created (status=TRIGGERED, timeline: TRIGGERED, ATTACHED)
+    2. POST exact same Alert -> Alert #2 created, attaches to Incident #1, timeline gains ALERT_ATTACHED (total 3 events)
+    3. POST /api/incidents/{id}/acknowledge/ -> TRIGGERED -> ACKNOWLEDGED, acknowledged_at set, timeline gains ACKNOWLEDGED
+    4. POST same acknowledge again -> idempotent success, timestamp unchanged, no duplicate event
+    5. POST /api/incidents/{id}/resolve/ -> ACKNOWLEDGED -> RESOLVED, resolved_at set, timeline gains RESOLVED
+    6. Submit identical alert again -> Alert #3 created, Incident #2 created (does NOT attach to resolved Incident #1)
+    7. Try reopening Incident #1 while Incident #2 is active -> clean 409 conflict
+    8. Resolve Incident #2, then reopen Incident #1 -> Incident #1 returns to TRIGGERED, reset timestamps, timeline gains REOPENED
+    """
+    # Setup team and service
+    team = Team.objects.create(name="Backend Team", slug="backend-golden", is_active=True)
+    service = Service.objects.create(name="Payment API", slug="payment-api-golden", team=team, is_active=True)
+
+    alerts_url = reverse("api:alert-list")
+    alert_payload = {
+        "service_id": service.id,
+        "severity": "critical",
+        "message": "HTTP 500 rate above 20%",
+        "source": "prometheus",
+    }
+
+    # Step 1: Ingest initial alert
+    resp_a1 = client.post(alerts_url, alert_payload, format="json")
+    assert resp_a1.status_code == 201
+    data_a1 = resp_a1.json()
+    inc1_id = data_a1["incident_id"]
+    assert inc1_id is not None
+
+    inc1_url = reverse("api:incident-detail", kwargs={"pk": inc1_id})
+    inc1_resp = client.get(inc1_url)
+    assert inc1_resp.status_code == 200
+    inc1_data = inc1_resp.json()
+    assert inc1_data["status"] == "TRIGGERED"
+    assert inc1_data["severity"] == "CRITICAL"
+    assert inc1_data["service"]["id"] == service.id
+    assert inc1_data["assigned_user"] is None
+    assert inc1_data["resolved_at"] is None
+    assert inc1_data["alert_count"] == 1
+
+    events_url_1 = reverse("api:incident-events", kwargs={"pk": inc1_id})
+    events_1 = client.get(events_url_1).json()
+    assert len(events_1) == 2
+    assert events_1[0]["event_type"] == "INCIDENT_TRIGGERED"
+    assert events_1[1]["event_type"] == "ALERT_ATTACHED"
+
+    # Step 2: Post exact same alert again
+    resp_a2 = client.post(alerts_url, alert_payload, format="json")
+    assert resp_a2.status_code == 201
+    data_a2 = resp_a2.json()
+    assert data_a2["id"] != data_a1["id"]
+    assert data_a2["incident_id"] == inc1_id
+
+    events_2 = client.get(events_url_1).json()
+    assert len(events_2) == 3
+    assert events_2[2]["event_type"] == "ALERT_ATTACHED"
+
+    # Step 3: Acknowledge Incident #1
+    ack_url_1 = reverse("api:incident-acknowledge", kwargs={"pk": inc1_id})
+    ack_resp_1 = client.post(ack_url_1)
+    assert ack_resp_1.status_code == 200
+    ack_data_1 = ack_resp_1.json()
+    assert ack_data_1["status"] == "ACKNOWLEDGED"
+    assert ack_data_1["acknowledged_at"] is not None
+    orig_ack_time = ack_data_1["acknowledged_at"]
+
+    events_3 = client.get(events_url_1).json()
+    assert len(events_3) == 4
+    assert events_3[3]["event_type"] == "INCIDENT_ACKNOWLEDGED"
+
+    # Step 4: Acknowledge again (idempotent)
+    ack_resp_again = client.post(ack_url_1)
+    assert ack_resp_again.status_code == 200
+    assert ack_resp_again.json()["acknowledged_at"] == orig_ack_time
+    assert len(client.get(events_url_1).json()) == 4
+
+    # Step 5: Resolve Incident #1
+    resolve_url_1 = reverse("api:incident-resolve", kwargs={"pk": inc1_id})
+    resolve_resp_1 = client.post(resolve_url_1)
+    assert resolve_resp_1.status_code == 200
+    assert resolve_resp_1.json()["status"] == "RESOLVED"
+    assert resolve_resp_1.json()["resolved_at"] is not None
+
+    events_5 = client.get(events_url_1).json()
+    assert len(events_5) == 5
+    assert events_5[4]["event_type"] == "INCIDENT_RESOLVED"
+
+    # Step 6: Ingest identical alert again (must create Incident #2, NOT attach to resolved #1)
+    resp_a3 = client.post(alerts_url, alert_payload, format="json")
+    assert resp_a3.status_code == 201
+    data_a3 = resp_a3.json()
+    inc2_id = data_a3["incident_id"]
+    assert inc2_id is not None
+    assert inc2_id != inc1_id
+
+    # Step 7: Try reopening Incident #1 while Incident #2 is active -> clean 409 conflict
+    reopen_url_1 = reverse("api:incident-reopen", kwargs={"pk": inc1_id})
+    reopen_conflict_resp = client.post(reopen_url_1)
+    assert reopen_conflict_resp.status_code == 409
+    assert "active incident already exists" in reopen_conflict_resp.json()["detail"]
+
+    # Step 8: Resolve Incident #2, then reopen Incident #1
+    resolve_url_2 = reverse("api:incident-resolve", kwargs={"pk": inc2_id})
+    client.post(resolve_url_2)
+
+    reopen_resp_1 = client.post(reopen_url_1)
+    assert reopen_resp_1.status_code == 200
+    reopened_data = reopen_resp_1.json()
+    assert reopened_data["status"] == "TRIGGERED"
+    assert reopened_data["triggered_at"] is not None
+    assert reopened_data["acknowledged_at"] is None
+    assert reopened_data["resolved_at"] is None
+
+    events_final = client.get(events_url_1).json()
+    assert len(events_final) == 6
+    assert events_final[5]["event_type"] == "INCIDENT_REOPENED"
+

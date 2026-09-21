@@ -10,6 +10,7 @@ class AlertSerializer(serializers.ModelSerializer):
     """Output representation of a persisted operational alert."""
 
     service = ServiceSummarySerializer(read_only=True)
+    incident_id = serializers.IntegerField(source="incident.id", read_only=True, allow_null=True)
 
     class Meta:
         model = Alert
@@ -23,12 +24,14 @@ class AlertSerializer(serializers.ModelSerializer):
             "metadata",
             "received_at",
             "created_at",
+            "incident_id",
         ]
         read_only_fields = [
             "id",
             "fingerprint",
             "received_at",
             "created_at",
+            "incident_id",
         ]
 
 

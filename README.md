@@ -282,9 +282,35 @@ npm run build
   - `GET /api/alerts/{id}/`
 - **Demo Data Management**: Updated `seed_demo` to provision `Payment API`, `Authentication API`, and `Notification API` for `Backend Team`.
 
+**Phase 3 — Incident Engine, Timeline & Alert Deduplication (Complete)**
+- **Incident Model**: Core operational domain entity tracking outage lifecycles.
+  - Fields: `service`, `title`, `severity`, `status` (`TRIGGERED`, `ACKNOWLEDGED`, `RESOLVED`), `fingerprint`, `assigned_user` (nullable), `triggered_at`, `acknowledged_at`, `resolved_at`, `created_at`, `updated_at`.
+  - Database-Enforced Partial Unique Invariant: `UniqueConstraint(fields=["service", "fingerprint"], condition=Q(resolved_at__isnull=True), name="unique_active_incident_service_fingerprint")`. Ensures exactly one active incident per service and fingerprint.
+- **IncidentEvent Model (Immutable Timeline)**:
+  - Event types: `INCIDENT_TRIGGERED`, `ALERT_ATTACHED`, `INCIDENT_ACKNOWLEDGED`, `INCIDENT_RESOLVED`, `INCIDENT_REOPENED`.
+  - Chronological ordering: `["created_at", "id"]`.
+  - Strict append-only audit protection: Model-level validation prevents edits and deletions; `on_delete=models.PROTECT` prevents cascading deletion of incident histories.
+- **Alert Triage & Deduplication**:
+  - `triage_alert(alert) -> Incident`: Synchronously executed upon alert ingestion.
+  - Active incident lookup: `service = alert.service AND fingerprint = alert.fingerprint AND resolved_at IS NULL`.
+  - Concurrency safety: Uses `transaction.atomic()`, `select_for_update()`, and catches `IntegrityError` on the partial unique constraint to guarantee zero race condition duplicates.
+  - Idempotent: Re-triaging an already-linked alert safely returns the incident without duplicate events.
+- **State Machine Transitions**:
+  - `TRIGGERED -> ACKNOWLEDGED`: Sets `acknowledged_at`, records `INCIDENT_ACKNOWLEDGED` (first write wins, subsequent duplicate acks are idempotent).
+  - `TRIGGERED -> RESOLVED` / `ACKNOWLEDGED -> RESOLVED`: Sets `resolved_at`, records `INCIDENT_RESOLVED` (idempotent if already resolved).
+  - `RESOLVED -> TRIGGERED`: Explicit reopen operation (`POST /api/incidents/{id}/reopen/`). Resets lifecycle timestamps (`triggered_at = now`, `acknowledged_at = null`, `resolved_at = null`), records `INCIDENT_REOPENED` with prior timestamps in metadata. Blocked with HTTP 409 Conflict if an active incident exists for the same service and fingerprint.
+  - Direct status modification via generic `PATCH` and direct incident creation via `POST /api/incidents/` are strictly prohibited (HTTP 405).
+- **Resolved Incident Policy**:
+  - New matching alert arriving after resolution generates a **NEW Incident** (avoids ambiguous auto-reopening windows and keeps MTTA/MTTR metrics clean).
+- **REST Endpoints**:
+  - `GET /api/incidents/` (supports `?status=...`, `?service=...`, `?severity=...`, `?active=<true|false>`)
+  - `GET /api/incidents/{id}/`
+  - `GET /api/incidents/{id}/events/` (chronological read-only timeline)
+  - `POST /api/incidents/{id}/acknowledge/`
+  - `POST /api/incidents/{id}/resolve/`
+  - `POST /api/incidents/{id}/reopen/`
+
 ### Not Yet Implemented:
-- incident lifecycle & state machines (Phase 3)
-- alert deduplication into active incidents (Phase 3)
 - scheduling & rotations (Phase 4)
 - escalation policies (Phase 5)
 - notifications dispatch (Phase 6)

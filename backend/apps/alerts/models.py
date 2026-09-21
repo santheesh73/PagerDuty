@@ -19,6 +19,13 @@ class Alert(models.Model):
         on_delete=models.CASCADE,
         related_name="alerts",
     )
+    incident = models.ForeignKey(
+        "incidents.Incident",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="alerts",
+    )
     severity = models.CharField(
         max_length=32,
         choices=Severity.choices,

@@ -19,7 +19,7 @@ class AlertViewSet(
     GET: Inspects alerts with filtering by service, severity, and source.
     """
 
-    queryset = Alert.objects.select_related("service").all().order_by("-received_at")
+    queryset = Alert.objects.select_related("service", "incident").all().order_by("-received_at")
     serializer_class = AlertSerializer
     permission_classes = [AllowAny]
     http_method_names = ["get", "post", "head", "options"]

@@ -1,11 +1,17 @@
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from apps.services.models import Service
 
 from .models import Alert
-from .triage import build_alert_fingerprint, normalize_alert_message, normalize_alert_source
+from .triage import (
+    build_alert_fingerprint,
+    normalize_alert_message,
+    normalize_alert_source,
+    triage_alert,
+)
 
 
 def ingest_alert(
@@ -46,11 +52,15 @@ def ingest_alert(
         message=clean_message,
     )
 
-    return Alert.objects.create(
-        service=service,
-        severity=canonical_severity,
-        message=clean_message,
-        source=clean_source,
-        fingerprint=fingerprint,
-        metadata=metadata or {},
-    )
+    with transaction.atomic():
+        alert = Alert.objects.create(
+            service=service,
+            severity=canonical_severity,
+            message=clean_message,
+            source=clean_source,
+            fingerprint=fingerprint,
+            metadata=metadata or {},
+        )
+        triage_alert(alert)
+        alert.refresh_from_db()
+        return alert
