@@ -310,9 +310,47 @@ npm run build
   - `POST /api/incidents/{id}/resolve/`
   - `POST /api/incidents/{id}/reopen/`
 
+**Phase 4 — Scheduling & Intelligent Routing (Complete)**
+- **Schedule Model**: Operational on-call schedule owned by a `Team`.
+  - Fields: `name`, `slug` (unique), `team` (FK to `users.Team`), `timezone` (validated IANA name e.g. `UTC`, `Asia/Kolkata`), `is_primary`, `is_active`, `created_at`, `updated_at`.
+  - **Database Invariant**: `UniqueConstraint(fields=["team"], condition=Q(is_primary=True, is_active=True), name="unique_active_primary_schedule_per_team")`. Enforces exactly one active primary schedule per team for deterministic incident routing.
+- **ScheduleRotation Model**: Concrete on-call shift window assigned to an active team member.
+  - Fields: `schedule` (FK), `user` (FK to `AUTH_USER_MODEL`), `start_time` (UTC datetime), `end_time` (UTC datetime), `is_override` (boolean), `created_at`, `updated_at`.
+  - **Database Constraint**: `CheckConstraint(condition=Q(end_time__gt=F("start_time")), name="rotation_end_time_after_start_time")`.
+  - **UTC & Timezone Rules**: All rotation timestamps are strictly validated as timezone-aware and persisted in UTC.
+  - **Half-Open Intervals**: Operates on `start_time <= timestamp < end_time` semantics, eliminating boundary ambiguity at exact shift handoffs (e.g. 17:00:00).
+  - **User Eligibility**: Only active users with an active `TeamMembership` in the schedule's owning team can be assigned to a rotation (`IneligibleUserError`).
+  - **Overlap Validation**: Base-to-base and override-to-override overlaps on the same schedule are rejected (`RotationOverlapError`). Override-to-base overlaps are allowed because overrides intentionally replace base shifts.
+- **Deterministic On-Call Resolution (`apps/scheduling/services.py`)**:
+  - `get_on_call(schedule, timestamp) -> User | None`: Pure function requiring an explicit timezone-aware timestamp (naive datetimes rejected with `InvalidTimestampError`).
+  - **Override Precedence**: Active overrides strictly supersede base rotations.
+  - `get_on_call_assignment(schedule, timestamp) -> dict | None`: Returns metadata `{user, rotation, source: "override" | "base"}`.
+  - `get_routing_schedule(service) -> Schedule | None`: Resolves operational schedule via `Service -> Team -> Primary Active Schedule`.
+- **Automatic Incident Routing (`assign_incident_on_creation`)**:
+  - Triggered during `triage_alert()` ONLY when a new incident is created.
+  - Resolves responder using `incident.triggered_at` for reproducible, deterministic assignments.
+  - Persists `incident.assigned_user` and appends `RESPONDER_ASSIGNED` event to the incident timeline.
+  - **Assignment Stability**: Duplicate alerts attaching to an active incident (`ALERT_ATTACHED`) preserve the existing assignee and never recompute routing, even if on-call shifts rotate mid-incident.
+  - **No-Responder Policy**: If a team has no active primary schedule or the schedule has no active rotation at `triggered_at`, the incident is created safely with `assigned_user = None` and a `ROUTING_UNAVAILABLE` event is appended to the timeline (no 500s, no arbitrary fallbacks).
+  - **Idempotency**: Calling assignment logic multiple times preserves existing assignee without generating duplicate events.
+- **REST Endpoints**:
+  - `GET /api/schedules/` (supports `?team=<id>`, `?is_active=<true|false>`, `?is_primary=<true|false>`)
+  - `POST /api/schedules/`
+  - `GET /api/schedules/{id}/`
+  - `PATCH /api/schedules/{id}/`
+  - `GET /api/schedules/{id}/on-call/` (supports `?at=<ISO_8601>`, returns on-call user and source)
+  - `GET /api/schedule-rotations/` (supports `?schedule=<id>`, `?user=<id>`, `?is_override=<true|false>`)
+  - `POST /api/schedule-rotations/`
+  - `GET /api/schedule-rotations/{id}/`
+  - `PATCH /api/schedule-rotations/{id}/`
+  - `DELETE /api/schedule-rotations/{id}/`
+- **Admin & Demo Data**:
+  - Registered `Schedule` and `ScheduleRotation` in Django admin.
+  - Extended `python manage.py seed_demo` to seed `Backend Primary` schedule with base rotations for Alice and Bob, plus an override.
+
 ### Not Yet Implemented:
-- scheduling & rotations (Phase 4)
-- escalation policies (Phase 5)
-- notifications dispatch (Phase 6)
-- analytics & MTTA/MTTR (Phase 7)
-- operational frontend (Phase 8+)
+- EscalationPolicy & EscalationLevel (Phase 5)
+- Celery escalation timers & delayed workflows (Phase 5)
+- Notification delivery & multi-channel dispatch (Phase 6)
+- Analytics & MTTA/MTTR metrics (Phase 7)
+- Operational frontend dashboard & pages (Phase 8+)

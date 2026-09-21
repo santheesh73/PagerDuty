@@ -226,9 +226,10 @@ def test_phase_3_golden_acceptance_scenario(client):
 
     events_url_1 = reverse("api:incident-events", kwargs={"pk": inc1_id})
     events_1 = client.get(events_url_1).json()
-    assert len(events_1) == 2
+    assert len(events_1) == 3
     assert events_1[0]["event_type"] == "INCIDENT_TRIGGERED"
     assert events_1[1]["event_type"] == "ALERT_ATTACHED"
+    assert events_1[2]["event_type"] == "ROUTING_UNAVAILABLE"
 
     # Step 2: Post exact same alert again
     resp_a2 = client.post(alerts_url, alert_payload, format="json")
@@ -238,8 +239,8 @@ def test_phase_3_golden_acceptance_scenario(client):
     assert data_a2["incident_id"] == inc1_id
 
     events_2 = client.get(events_url_1).json()
-    assert len(events_2) == 3
-    assert events_2[2]["event_type"] == "ALERT_ATTACHED"
+    assert len(events_2) == 4
+    assert events_2[3]["event_type"] == "ALERT_ATTACHED"
 
     # Step 3: Acknowledge Incident #1
     ack_url_1 = reverse("api:incident-acknowledge", kwargs={"pk": inc1_id})
@@ -251,14 +252,14 @@ def test_phase_3_golden_acceptance_scenario(client):
     orig_ack_time = ack_data_1["acknowledged_at"]
 
     events_3 = client.get(events_url_1).json()
-    assert len(events_3) == 4
-    assert events_3[3]["event_type"] == "INCIDENT_ACKNOWLEDGED"
+    assert len(events_3) == 5
+    assert events_3[4]["event_type"] == "INCIDENT_ACKNOWLEDGED"
 
     # Step 4: Acknowledge again (idempotent)
     ack_resp_again = client.post(ack_url_1)
     assert ack_resp_again.status_code == 200
     assert ack_resp_again.json()["acknowledged_at"] == orig_ack_time
-    assert len(client.get(events_url_1).json()) == 4
+    assert len(client.get(events_url_1).json()) == 5
 
     # Step 5: Resolve Incident #1
     resolve_url_1 = reverse("api:incident-resolve", kwargs={"pk": inc1_id})
@@ -268,8 +269,8 @@ def test_phase_3_golden_acceptance_scenario(client):
     assert resolve_resp_1.json()["resolved_at"] is not None
 
     events_5 = client.get(events_url_1).json()
-    assert len(events_5) == 5
-    assert events_5[4]["event_type"] == "INCIDENT_RESOLVED"
+    assert len(events_5) == 6
+    assert events_5[5]["event_type"] == "INCIDENT_RESOLVED"
 
     # Step 6: Ingest identical alert again (must create Incident #2, NOT attach to resolved #1)
     resp_a3 = client.post(alerts_url, alert_payload, format="json")
@@ -298,6 +299,6 @@ def test_phase_3_golden_acceptance_scenario(client):
     assert reopened_data["resolved_at"] is None
 
     events_final = client.get(events_url_1).json()
-    assert len(events_final) == 6
-    assert events_final[5]["event_type"] == "INCIDENT_REOPENED"
+    assert len(events_final) == 7
+    assert events_final[6]["event_type"] == "INCIDENT_REOPENED"
 

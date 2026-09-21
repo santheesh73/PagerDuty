@@ -116,7 +116,9 @@ class ScheduleRotation(models.Model):
             from apps.users.models import TeamMembership
 
             if not self.user.is_active:
-                raise IneligibleUserError({"user": f"User '{self.user.username}' is inactive."})
+                err = IneligibleUserError({"user": f"User '{self.user.username}' is inactive."})
+                self._domain_error = err
+                raise err
 
             is_active_member = TeamMembership.objects.filter(
                 team=self.schedule.team,
@@ -124,9 +126,11 @@ class ScheduleRotation(models.Model):
                 is_active=True,
             ).exists()
             if not is_active_member:
-                raise IneligibleUserError({
+                err = IneligibleUserError({
                     "user": f"User '{self.user.username}' is not an active member of team '{self.schedule.team.name}'."
                 })
+                self._domain_error = err
+                raise err
 
             # Overlap validation:
             # Base cannot overlap with Base; Override cannot overlap with Override.
@@ -142,11 +146,20 @@ class ScheduleRotation(models.Model):
 
                 if overlap_qs.exists():
                     rotation_type = "Override" if self.is_override else "Base"
-                    raise RotationOverlapError(
+                    err = RotationOverlapError(
                         f"{rotation_type} rotation overlaps with an existing {rotation_type.lower()} rotation on this schedule."
                     )
+                    self._domain_error = err
+                    raise err
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        try:
+            self.full_clean()
+        except ValidationError as exc:
+            if getattr(self, "_domain_error", None):
+                domain_err = self._domain_error
+                self._domain_error = None
+                raise domain_err
+            raise exc
         super().save(*args, **kwargs)
 

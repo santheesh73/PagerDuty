@@ -31,11 +31,12 @@ def test_timeline_event_sequence_for_new_and_duplicate_alerts(service):
     )
     inc = triage_alert(a1)
     events_1 = list(inc.events.all().order_by("created_at", "id"))
-    assert len(events_1) == 2
+    assert len(events_1) == 3
     assert events_1[0].event_type == IncidentEvent.EventType.INCIDENT_TRIGGERED
     assert events_1[0].metadata["initial_alert_id"] == a1.id
     assert events_1[1].event_type == IncidentEvent.EventType.ALERT_ATTACHED
     assert events_1[1].metadata["alert_id"] == a1.id
+    assert events_1[2].event_type == IncidentEvent.EventType.ROUTING_UNAVAILABLE
 
     # Duplicate alert arrives
     a2 = Alert.objects.create(
@@ -49,9 +50,9 @@ def test_timeline_event_sequence_for_new_and_duplicate_alerts(service):
     assert inc2.id == inc.id
 
     events_2 = list(inc.events.all().order_by("created_at", "id"))
-    assert len(events_2) == 3
-    assert events_2[2].event_type == IncidentEvent.EventType.ALERT_ATTACHED
-    assert events_2[2].metadata["alert_id"] == a2.id
+    assert len(events_2) == 4
+    assert events_2[3].event_type == IncidentEvent.EventType.ALERT_ATTACHED
+    assert events_2[3].metadata["alert_id"] == a2.id
 
 
 @pytest.mark.django_db
