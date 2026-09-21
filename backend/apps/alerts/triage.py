@@ -78,6 +78,7 @@ def triage_alert(alert: "Alert") -> "Incident":
             .first()
         )
 
+        is_new_incident = False
         if not incident:
             try:
                 with transaction.atomic():
@@ -96,6 +97,7 @@ def triage_alert(alert: "Alert") -> "Incident":
                         actor=None,
                         metadata={"initial_alert_id": locked_alert.id},
                     )
+                    is_new_incident = True
             except IntegrityError:
                 # Concurrent race condition: another transaction created active incident first
                 incident = (
@@ -119,6 +121,11 @@ def triage_alert(alert: "Alert") -> "Incident":
                 "fingerprint": locked_alert.fingerprint,
             },
         )
+
+        if is_new_incident:
+            from apps.scheduling.services import assign_incident_on_creation
+
+            assign_incident_on_creation(incident, incident.triggered_at)
 
         return incident
 

@@ -46,6 +46,12 @@ class Schedule(models.Model):
             valid_timezones = zoneinfo.available_timezones()
             if self.timezone not in valid_timezones:
                 raise ValidationError({"timezone": f"Invalid timezone '{self.timezone}'."})
+        if self.team_id and not self.team.is_active and self.is_active:
+            raise ValidationError({"team": "Cannot create or activate a schedule for an inactive team."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class ScheduleRotation(models.Model):
@@ -92,6 +98,14 @@ class ScheduleRotation(models.Model):
 
     def clean(self):
         super().clean()
+        from django.utils import timezone
+
+        from apps.scheduling.exceptions import IneligibleUserError, InvalidTimestampError, RotationOverlapError
+
+        if self.start_time and timezone.is_naive(self.start_time):
+            raise InvalidTimestampError("Rotation start_time must be timezone-aware.")
+        if self.end_time and timezone.is_naive(self.end_time):
+            raise InvalidTimestampError("Rotation end_time must be timezone-aware.")
 
         if self.start_time and self.end_time:
             if self.end_time <= self.start_time:
@@ -102,7 +116,7 @@ class ScheduleRotation(models.Model):
             from apps.users.models import TeamMembership
 
             if not self.user.is_active:
-                raise ValidationError({"user": f"User '{self.user.username}' is inactive."})
+                raise IneligibleUserError({"user": f"User '{self.user.username}' is inactive."})
 
             is_active_member = TeamMembership.objects.filter(
                 team=self.schedule.team,
@@ -110,7 +124,7 @@ class ScheduleRotation(models.Model):
                 is_active=True,
             ).exists()
             if not is_active_member:
-                raise ValidationError({
+                raise IneligibleUserError({
                     "user": f"User '{self.user.username}' is not an active member of team '{self.schedule.team.name}'."
                 })
 
@@ -128,6 +142,11 @@ class ScheduleRotation(models.Model):
 
                 if overlap_qs.exists():
                     rotation_type = "Override" if self.is_override else "Base"
-                    raise ValidationError(
+                    raise RotationOverlapError(
                         f"{rotation_type} rotation overlaps with an existing {rotation_type.lower()} rotation on this schedule."
                     )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+

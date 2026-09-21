@@ -117,6 +117,61 @@ class Command(BaseCommand):
                 service.is_active = True
                 service.save()
             action = "Created" if created else "Ensured"
-            self.stdout.write(f"  - {action} service: {service.name} ({service.status})")
+        # 5. Schedules & Rotations (Phase 4)
+        from datetime import datetime, timezone as dt_timezone
+        from apps.scheduling.models import Schedule, ScheduleRotation
+
+        backend_schedule, created = Schedule.objects.get_or_create(
+            slug="backend-primary",
+            defaults={
+                "name": "Backend Primary",
+                "team": teams["backend"],
+                "timezone": "UTC",
+                "is_primary": True,
+                "is_active": True,
+            },
+        )
+        if not created:
+            backend_schedule.name = "Backend Primary"
+            backend_schedule.team = teams["backend"]
+            backend_schedule.timezone = "UTC"
+            backend_schedule.is_primary = True
+            backend_schedule.is_active = True
+            backend_schedule.save()
+        action = "Created" if created else "Ensured"
+        self.stdout.write(f"  - {action} schedule: {backend_schedule.name}")
+
+        # Seed rotations for deterministic reference date 2026-09-21
+        rotations_data = [
+            {
+                "user": users["alice"],
+                "start_time": datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
+                "end_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+                "is_override": False,
+            },
+            {
+                "user": users["bob"],
+                "start_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+                "end_time": datetime(2026, 9, 22, 1, 0, 0, tzinfo=dt_timezone.utc),
+                "is_override": False,
+            },
+            {
+                "user": users["bob"],
+                "start_time": datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
+                "end_time": datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+                "is_override": True,
+            },
+        ]
+        for r_data in rotations_data:
+            rot, created = ScheduleRotation.objects.get_or_create(
+                schedule=backend_schedule,
+                start_time=r_data["start_time"],
+                end_time=r_data["end_time"],
+                is_override=r_data["is_override"],
+                defaults={"user": r_data["user"]},
+            )
+            action = "Created" if created else "Ensured"
+            self.stdout.write(f"  - {action} rotation: {rot}")
 
         self.stdout.write(self.style.SUCCESS("Successfully seeded demo data."))
+
