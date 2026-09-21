@@ -1,15 +1,16 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from apps.services.models import Service
 from apps.users.models import Team, TeamMembership, User
 
 
 class Command(BaseCommand):
-    help = "Seed deterministic demo users, teams, and memberships (idempotent)."
+    help = "Seed deterministic demo users, teams, memberships, and services (idempotent)."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write("Seeding demo identity data...")
+        self.stdout.write("Seeding demo identity and services data...")
 
         # 1. Users
         users_data = [
@@ -73,5 +74,49 @@ class Command(BaseCommand):
                 membership.save()
             action = "Created" if created else "Ensured"
             self.stdout.write(f"  - {action} membership: {membership}")
+
+        # 4. Services
+        services_data = [
+            {
+                "name": "Payment API",
+                "slug": "payment-api",
+                "team": teams["backend"],
+                "description": "Payment processing and settlement service",
+                "status": Service.Status.HEALTHY,
+            },
+            {
+                "name": "Authentication API",
+                "slug": "auth-api",
+                "team": teams["backend"],
+                "description": "User authentication and token service",
+                "status": Service.Status.HEALTHY,
+            },
+            {
+                "name": "Notification API",
+                "slug": "notification-api",
+                "team": teams["platform"],
+                "description": "Multi-channel notification dispatch service",
+                "status": Service.Status.HEALTHY,
+            },
+        ]
+        for s_data in services_data:
+            service, created = Service.objects.get_or_create(
+                slug=s_data["slug"],
+                defaults={
+                    "name": s_data["name"],
+                    "team": s_data["team"],
+                    "description": s_data["description"],
+                    "status": s_data["status"],
+                    "is_active": True,
+                },
+            )
+            if not created:
+                service.name = s_data["name"]
+                service.team = s_data["team"]
+                service.status = s_data["status"]
+                service.is_active = True
+                service.save()
+            action = "Created" if created else "Ensured"
+            self.stdout.write(f"  - {action} service: {service.name} ({service.status})")
 
         self.stdout.write(self.style.SUCCESS("Successfully seeded demo data."))

@@ -48,6 +48,8 @@ def health_check(request):
 api_patterns = [
     path("health/", health_check, name="health_check"),
     path("", include("apps.users.urls")),
+    path("", include("apps.services.urls")),
+    path("", include("apps.alerts.urls")),
 ]
 
 urlpatterns = [

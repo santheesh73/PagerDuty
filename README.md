@@ -257,10 +257,34 @@ npm run build
   - `DELETE /api/team-memberships/{id}/` (soft-deactivates)
 - **Demo Data Management**: Idempotent seeding command `python manage.py seed_demo`.
 
+**Phase 2 — Services & Alert Ingestion (Complete)**
+- **Service Model**: Monitored component owned by an operational `Team`.
+  - Fields: `name`, `slug` (unique), `description`, `team` (FK to `users.Team`), `status` (`HEALTHY`, `DEGRADED`, `DOWN`), `is_active`.
+  - Inactive team validation: Cannot bind an active service to an inactive team.
+- **Alert Model**: Point-in-time operational signal targeting a `Service`.
+  - Fields: `service` (FK to `services.Service`), `severity` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), `message`, `source`, `fingerprint` (indexed SHA-256 hash), `metadata` (JSON), `received_at`, `created_at`.
+- **Deterministic Alert Fingerprinting Foundation**:
+  - Implemented in `apps/alerts/triage.py`.
+  - Normalizes `source` (trimmed, lowercase) and `message` (trimmed, internal whitespace collapsed).
+  - Deterministic digest: `SHA-256(f"{service_id}:{normalized_source}:{normalized_message}")`.
+  - Invariant: Identical incoming alerts generate identical 64-character hex digests.
+- **Alert Ingestion Pipeline**:
+  - Encapsulated in `ingest_alert()` domain service (`apps/alerts/services.py`).
+  - Strict validation: Inactive or nonexistent services rejected; severity canonicalized; non-blank message/source enforced.
+  - Persists all incoming alerts; deduplication into active incidents is deferred to Phase 3.
+- **REST Endpoints**:
+  - `GET /api/services/` (supports `?team=<id>`, `?status=<HEALTHY|DEGRADED|DOWN>`, `?is_active=<true|false>`)
+  - `POST /api/services/`
+  - `GET /api/services/{id}/`
+  - `PATCH /api/services/{id}/`
+  - `GET /api/alerts/` (supports `?service=<id>`, `?severity=<LOW|MEDIUM|HIGH|CRITICAL>`, `?source=<source>`)
+  - `POST /api/alerts/` (ingestion endpoint, returns 201 Created with fingerprint)
+  - `GET /api/alerts/{id}/`
+- **Demo Data Management**: Updated `seed_demo` to provision `Payment API`, `Authentication API`, and `Notification API` for `Backend Team`.
+
 ### Not Yet Implemented:
-- service management (Phase 2)
-- alert ingestion & triage (Phase 2)
-- incident lifecycle (Phase 3)
+- incident lifecycle & state machines (Phase 3)
+- alert deduplication into active incidents (Phase 3)
 - scheduling & rotations (Phase 4)
 - escalation policies (Phase 5)
 - notifications dispatch (Phase 6)
