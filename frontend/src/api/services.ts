@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Service } from '../types/service';
+import { CreateServiceInput, Service, UpdateServiceInput } from '../types/service';
 
 export interface ServiceFilters {
   team?: number;
@@ -14,3 +14,12 @@ export const getServices = async (filters?: ServiceFilters): Promise<Service[]> 
 export const getService = async (id: number): Promise<Service> => {
   return apiClient.get<Service>(`/services/${id}/`);
 };
+
+export const createService = async (data: CreateServiceInput): Promise<Service> => {
+  return apiClient.post<Service>('/services/', data);
+};
+
+export const updateService = async (id: number, data: UpdateServiceInput): Promise<Service> => {
+  return apiClient.patch<Service>(`/services/${id}/`, data);
+};
+

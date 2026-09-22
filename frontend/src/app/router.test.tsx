@@ -32,34 +32,34 @@ describe('SPA Router', () => {
     expect(screen.getByText(/Back to Incidents/i)).toBeInTheDocument();
   });
 
-  it('renders Services placeholder at /services', () => {
+  it('renders Services screen at /services', () => {
     renderWithProviders(<AppRoutes />, { route: '/services' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Services' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Service Catalog' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Phase 8/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Service catalog, team ownership/i)).toBeInTheDocument();
   });
 
-  it('renders On-call Schedules placeholder at /on-call', () => {
+  it('renders On-call Schedules screen at /on-call', () => {
     renderWithProviders(<AppRoutes />, { route: '/on-call' });
 
-    expect(screen.getByRole('heading', { level: 1, name: 'On-call Schedules' })).toBeInTheDocument();
-    expect(screen.getByText(/Schedule Management/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'On-Call Schedules' })).toBeInTheDocument();
+    expect(screen.getByText(/Shift rotations, active responder calculation/i)).toBeInTheDocument();
   });
 
-  it('renders Escalation Policies placeholder at /escalation-policies', () => {
+  it('renders Escalation Policies screen at /escalation-policies', () => {
     renderWithProviders(<AppRoutes />, { route: '/escalation-policies' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Escalation Policies' })).toBeInTheDocument();
-    expect(screen.getByText(/Escalation Policy Editor/i)).toBeInTheDocument();
+    expect(screen.getByText(/Multi-tier incident escalation paths/i)).toBeInTheDocument();
   });
 
-  it('renders Analytics placeholder at /analytics', () => {
+  it('renders Analytics screen at /analytics', () => {
     renderWithProviders(<AppRoutes />, { route: '/analytics' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Analytics' })).toBeInTheDocument();
-    expect(screen.getByText(/Incident Analytics & Reporting/i)).toBeInTheDocument();
+    expect(screen.getByText(/Authoritative Mean Time to Acknowledge/i)).toBeInTheDocument();
   });
+
 
   it('renders NotFound component for unknown routes', () => {
     renderWithProviders(<AppRoutes />, { route: '/some-non-existent-route' });

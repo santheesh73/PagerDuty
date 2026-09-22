@@ -419,9 +419,53 @@ npm run build
   - Comprehensive unit and integration tests across API client, router, navigation, health indicator, error boundary, and formatting.
   - Vitest: **46 passed / 0 failed** across 13 test suites.
 
+**Phase 7 — Operations Frontend (Complete)**
+- **Live Operational Dashboard (`/`)**:
+  - Summary KPI cards for active incidents, triggered count, acknowledged count, resolved count, and total volume.
+  - Targeted 10-second background polling for active incident awareness without global polling overhead.
+  - High-visibility active incident workbench with direct quick-action triggers.
+- **Incident Workbench & Filtering (`/incidents`)**:
+  - Multi-dimensional filtering by lifecycle status (`all`, `triggered`, `acknowledged`, `resolved`), severity (`all`, `low`, `medium`, `high`, `critical`), and owning service.
+  - Tabular incident overview presenting service context, assigned responder, elapsed duration, and status indicators.
+- **Incident Detail & State Machine Actions (`/incidents/:id`)**:
+  - Authoritative incident metadata display: service, severity, current assignee, current escalation level, and lifecycle timestamps.
+  - Concurrency-safe state transitions via dedicated endpoints:
+    - `POST /api/incidents/{id}/acknowledge/`
+    - `POST /api/incidents/{id}/resolve/`
+    - `POST /api/incidents/{id}/reopen/`
+  - Modal action confirmation dialogs with optimistic/loading states and cache invalidation.
+- **Append-Only Event Timeline**:
+  - Chronological rendering of backend events (`INCIDENT_TRIGGERED`, `ALERT_ATTACHED`, `RESPONDER_ASSIGNED`, `INCIDENT_ACKNOWLEDGED`, `INCIDENT_RESOLVED`, `INCIDENT_REOPENED`).
+  - Immutable timeline displaying timestamps, initiating actor, and event metadata.
+
+**Phase 8 — Platform Configuration & Analytics Frontend (Complete)**
+- **Services Management (`/services`)**:
+  - Service registry displaying service name, owning team, active status, alert volume, open incident counts, and linked escalation policy.
+  - Service creation and edit modals with client-side form validation and team/policy assignment.
+- **On-Call Scheduling & Rotations (`/on-call`)**:
+  - Multi-schedule browser supporting primary schedule designation, timezone display, and active status.
+  - **Authoritative Current On-Call Visibility**: Directly queries `GET /api/schedules/{id}/on-call/` on a 30-second background refetch. Renders the backend-resolved user and assignment source (`override` vs `base`). **Zero client-side shift calculation**.
+  - **Rotation Management**: Shift list showing start/end in schedule timezone & UTC, assigned team member, and shift duration.
+  - **Schedule Overrides**: Half-open override intervals with immediate visual badge distinction, superseding base rotations.
+  - Create modals for schedules, rotations, and overrides with user eligibility filtering and start/end time validation.
+- **Escalation Policy Editor (`/escalation-policies`)**:
+  - Tiered escalation policy browser displaying policy metadata, owning team, and assigned services count.
+  - Multi-level sequencing: Displays ordered escalation steps targeting either `CURRENT_ON_CALL` or designated `USER` with configurable `wait_minutes`.
+  - Transactional Level Reordering: Move Up / Move Down actions executing atomic `POST /api/escalation-policies/{id}/reorder-levels/` requests.
+  - Level creation and deletion modals with team-scoped responder selection.
+- **Authoritative Analytics Dashboard (`/analytics`)**:
+  - Operational metrics consuming backend-computed contracts (`/api/analytics/summary/`, `/incidents-by-service/`, `/severity-distribution/`, `/trend/`).
+  - **Zero Client-Side Metric Derivation**: MTTA (Mean Time to Acknowledge), MTTR (Mean Time to Resolve), total incidents, active counts, and resolution rates are calculated strictly by PostgreSQL/Django backend services.
+  - Visual KPI cards, service breakdown table with resolution rates, severity distribution charts, and daily incident trend visualization.
+- **Frontend Test Suite & Quality**:
+  - Vitest: **66 passed / 0 failed** across 18 test files.
+  - TypeScript typechecking: 0 errors (`npm run typecheck`).
+  - ESLint: 0 errors, 0 warnings (`npm run lint`).
+  - Production build: Clean bundle emission in 2.7s (`npm run build`).
+
 ---
 
-## 5. Development & Testing Commands
+## 11. Development & Testing Commands
 
 ### Backend Commands:
 ```bash
@@ -452,7 +496,7 @@ npm run build
 
 ---
 
-## 6. Project Roadmap
+## 12. Project Roadmap
 
 - [x] **Phase 0 — Project Skeleton & Infrastructure**
 - [x] **Phase 1 — Identity & Teams Domain**
@@ -462,5 +506,6 @@ npm run build
 - [x] **Phase 5 — Escalation, Notifications & Backend Automation**
 - [x] **Phase 6 — Frontend Foundation**
 - [x] **Phase 7 — Operations Frontend** (Live Dashboard, Incident Workbench, Incident Detail, Actions & Timeline)
-- [ ] **Phase 8 — Platform Configuration & Analytics** (Service Registry, Schedule Editor, Escalation Policy Editor, MTTA/MTTR Analytics)
+- [x] **Phase 8 — Platform Configuration & Analytics** (Service Registry, Schedule Editor, Escalation Policy Editor, MTTA/MTTR Analytics)
+
 

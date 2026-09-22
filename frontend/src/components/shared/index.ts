@@ -8,3 +8,5 @@ export * from './EmptyState';
 export * from './StatusBadge';
 export * from './SeverityBadge';
 export * from './ErrorBoundary';
+export * from './Modal';
+

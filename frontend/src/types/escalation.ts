@@ -23,3 +23,32 @@ export interface EscalationPolicy {
   created_at: string;
   updated_at: string;
 }
+
+export interface CreateEscalationPolicyInput {
+  name: string;
+  slug: string;
+  team: number;
+  is_active?: boolean;
+}
+
+export interface UpdateEscalationPolicyInput {
+  name?: string;
+  slug?: string;
+  team?: number;
+  is_active?: boolean;
+}
+
+export interface CreateEscalationLevelInput {
+  policy: number;
+  order: number;
+  target_type: EscalationTargetType;
+  target_user?: number | null;
+  wait_minutes?: number;
+}
+
+export interface UpdateEscalationLevelInput {
+  order?: number;
+  target_type?: EscalationTargetType;
+  target_user?: number | null;
+  wait_minutes?: number;
+}

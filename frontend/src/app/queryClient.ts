@@ -53,4 +53,17 @@ export const queryKeys = {
 
   notifications: (filters?: Record<string, unknown>) => ['notifications', filters] as const,
   notification: (id: number | string) => ['notification', id] as const,
+
+  teams: (filters?: Record<string, unknown>) => ['teams', filters] as const,
+  team: (id: number | string) => ['team', id] as const,
+  teamMembers: (teamId: number | string) => ['team', teamId, 'members'] as const,
+  users: (filters?: Record<string, unknown>) => ['users', filters] as const,
+
+  analytics: {
+    summary: (range?: string) => ['analytics', 'summary', range] as const,
+    byService: (range?: string) => ['analytics', 'by-service', range] as const,
+    severity: (range?: string) => ['analytics', 'severity', range] as const,
+    trend: (range?: string) => ['analytics', 'trend', range] as const,
+  },
 };
+

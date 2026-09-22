@@ -6,3 +6,4 @@ export * from './incident';
 export * from './schedule';
 export * from './escalation';
 export * from './notification';
+export * from './analytics';
