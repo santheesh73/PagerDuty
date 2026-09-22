@@ -66,3 +66,11 @@ Thumbs.db
 *.sqlite3
 postgres_data/
 redis_data/
+
+# Temporary & Test Output
+scratch/
+.scratch/
+test-results/
+playwright-report/
+blob-report/
+

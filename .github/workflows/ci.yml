@@ -65,6 +65,19 @@ jobs:
           cd backend
           python manage.py check
 
+      - name: Run Django Migration Check
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.dev
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: incident_platform
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          cd backend
+          python manage.py makemigrations --check
+
       - name: Run Pytest
         env:
           DJANGO_SETTINGS_MODULE: config.settings.dev
