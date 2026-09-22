@@ -1,9 +1,11 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from apps.escalation.models import EscalationLevel, EscalationPolicy
+from apps.incidents.models import Incident, IncidentEvent
 from apps.scheduling.models import Schedule, ScheduleRotation
 from apps.services.models import Service
 from apps.users.models import Team, TeamMembership, User
@@ -252,6 +254,169 @@ class Command(BaseCommand):
             payment_service.escalation_policy = backend_policy
             payment_service.save(update_fields=["escalation_policy"])
             self.stdout.write(f"  - Linked Payment API to {backend_policy.name}")
+
+        # 7. Deterministic Sample Incidents (Phase 10 Product Experience)
+        auth_service = Service.objects.filter(slug="auth-api").first()
+        notification_service = Service.objects.filter(slug="notification-api").first()
+
+        now = timezone.now()
+
+        # INC-1: Payment API, Critical, Triggered, Assigned to Alice, Level 1
+        if payment_service:
+            inc1_fp = "payment-api-gateway-504-outage"
+            inc1_triggered = now - timedelta(minutes=15)
+            inc1, inc1_created = Incident.objects.get_or_create(
+                service=payment_service,
+                fingerprint=inc1_fp,
+                defaults={
+                    "title": "Payment Gateway 504 Gateway Timeout",
+                    "severity": Incident.Severity.CRITICAL,
+                    "status": Incident.Status.TRIGGERED,
+                    "assigned_user": users["alice"],
+                    "current_escalation_level": level_1,
+                    "triggered_at": inc1_triggered,
+                },
+            )
+            if inc1_created:
+                IncidentEvent.objects.create(
+                    incident=inc1,
+                    event_type=IncidentEvent.EventType.INCIDENT_TRIGGERED,
+                    actor=None,
+                    metadata={"service": "payment-api", "severity": "CRITICAL"},
+                    created_at=inc1_triggered,
+                )
+                IncidentEvent.objects.create(
+                    incident=inc1,
+                    event_type=IncidentEvent.EventType.RESPONDER_ASSIGNED,
+                    actor=users["alice"],
+                    metadata={"user_id": users["alice"].id, "username": "alice", "source": "schedule"},
+                    created_at=inc1_triggered + timedelta(seconds=2),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc1,
+                    event_type=IncidentEvent.EventType.ESCALATION_STARTED,
+                    actor=None,
+                    metadata={"policy": backend_policy.name, "level": 1},
+                    created_at=inc1_triggered + timedelta(seconds=5),
+                )
+            action = "Created" if inc1_created else "Ensured"
+            self.stdout.write(f"  - {action} sample incident 1: {inc1}")
+
+        # INC-2: Auth API, High, Acknowledged, Assigned to Bob, Level 2
+        if auth_service:
+            inc2_fp = "auth-api-token-validation-errors"
+            inc2_triggered = now - timedelta(hours=1, minutes=20)
+            inc2_ack = now - timedelta(minutes=45)
+            inc2, inc2_created = Incident.objects.get_or_create(
+                service=auth_service,
+                fingerprint=inc2_fp,
+                defaults={
+                    "title": "High Token Validation Latency & Failure Rate",
+                    "severity": Incident.Severity.HIGH,
+                    "status": Incident.Status.ACKNOWLEDGED,
+                    "assigned_user": users["bob"],
+                    "current_escalation_level": level_2,
+                    "triggered_at": inc2_triggered,
+                    "acknowledged_at": inc2_ack,
+                },
+            )
+            if inc2_created:
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.INCIDENT_TRIGGERED,
+                    actor=None,
+                    metadata={"service": "auth-api", "severity": "HIGH"},
+                    created_at=inc2_triggered,
+                )
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.RESPONDER_ASSIGNED,
+                    actor=users["alice"],
+                    metadata={"user_id": users["alice"].id, "username": "alice", "source": "schedule"},
+                    created_at=inc2_triggered + timedelta(seconds=2),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.ESCALATION_STARTED,
+                    actor=None,
+                    metadata={"policy": backend_policy.name, "level": 1},
+                    created_at=inc2_triggered + timedelta(seconds=5),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.INCIDENT_ESCALATED,
+                    actor=None,
+                    metadata={"from_level": 1, "to_level": 2},
+                    created_at=inc2_triggered + timedelta(minutes=5),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.RESPONDER_ASSIGNED,
+                    actor=users["bob"],
+                    metadata={"user_id": users["bob"].id, "username": "bob", "target_type": "USER"},
+                    created_at=inc2_triggered + timedelta(minutes=5, seconds=2),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc2,
+                    event_type=IncidentEvent.EventType.INCIDENT_ACKNOWLEDGED,
+                    actor=users["bob"],
+                    metadata={"acknowledged_by": users["bob"].username},
+                    created_at=inc2_ack,
+                )
+            action = "Created" if inc2_created else "Ensured"
+            self.stdout.write(f"  - {action} sample incident 2: {inc2}")
+
+        # INC-3: Notification API, Medium, Resolved, Resolved by Charlie
+        if notification_service:
+            inc3_fp = "notification-queue-backlog"
+            inc3_triggered = now - timedelta(hours=3)
+            inc3_ack = now - timedelta(hours=2, minutes=30)
+            inc3_resolved = now - timedelta(hours=1, minutes=15)
+            inc3, inc3_created = Incident.objects.get_or_create(
+                service=notification_service,
+                fingerprint=inc3_fp,
+                defaults={
+                    "title": "Notification Delivery Queue Congestion",
+                    "severity": Incident.Severity.MEDIUM,
+                    "status": Incident.Status.RESOLVED,
+                    "assigned_user": users["charlie"],
+                    "current_escalation_level": None,
+                    "triggered_at": inc3_triggered,
+                    "acknowledged_at": inc3_ack,
+                    "resolved_at": inc3_resolved,
+                },
+            )
+            if inc3_created:
+                IncidentEvent.objects.create(
+                    incident=inc3,
+                    event_type=IncidentEvent.EventType.INCIDENT_TRIGGERED,
+                    actor=None,
+                    metadata={"service": "notification-api", "severity": "MEDIUM"},
+                    created_at=inc3_triggered,
+                )
+                IncidentEvent.objects.create(
+                    incident=inc3,
+                    event_type=IncidentEvent.EventType.RESPONDER_ASSIGNED,
+                    actor=users["charlie"],
+                    metadata={"user_id": users["charlie"].id, "username": "charlie"},
+                    created_at=inc3_triggered + timedelta(seconds=2),
+                )
+                IncidentEvent.objects.create(
+                    incident=inc3,
+                    event_type=IncidentEvent.EventType.INCIDENT_ACKNOWLEDGED,
+                    actor=users["charlie"],
+                    metadata={"acknowledged_by": users["charlie"].username},
+                    created_at=inc3_ack,
+                )
+                IncidentEvent.objects.create(
+                    incident=inc3,
+                    event_type=IncidentEvent.EventType.INCIDENT_RESOLVED,
+                    actor=users["charlie"],
+                    metadata={"resolved_by": users["charlie"].username},
+                    created_at=inc3_resolved,
+                )
+            action = "Created" if inc3_created else "Ensured"
+            self.stdout.write(f"  - {action} sample incident 3: {inc3}")
 
         self.stdout.write(self.style.SUCCESS("Successfully seeded demo data."))
 

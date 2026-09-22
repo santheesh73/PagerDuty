@@ -8,7 +8,7 @@ import { ErrorState } from '../components/shared/ErrorState';
 import { IncidentActions } from '../components/incident/IncidentActions';
 import { IncidentTimeline } from '../components/incident/IncidentTimeline';
 import { IncidentNotifications } from '../components/incident/IncidentNotifications';
-import { formatDateTime, formatRelativeTime } from '../lib/format';
+import { formatDateTime, formatRelativeTime, formatIncidentId } from '../lib/format';
 import {
   ArrowLeft,
   Server,
@@ -81,7 +81,7 @@ export const IncidentDetail: React.FC = () => {
           message={
             error instanceof Error
               ? error.message
-              : `Incident #${incidentId} could not be located or has been removed.`
+              : `${formatIncidentId(incidentId)} could not be located or has been removed.`
           }
           onRetry={() => refetchIncident()}
         />
@@ -103,8 +103,8 @@ export const IncidentDetail: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
           <div className="space-y-2 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="font-mono text-sm font-semibold text-slate-400">
-                #{incident.id}
+              <span className="font-mono text-sm font-semibold text-slate-300 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded">
+                {formatIncidentId(incident.id)}
               </span>
               <SeverityBadge severity={incident.severity} />
               <StatusBadge status={incident.status} />

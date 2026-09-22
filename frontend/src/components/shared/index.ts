@@ -7,6 +7,7 @@ export * from './ErrorState';
 export * from './EmptyState';
 export * from './StatusBadge';
 export * from './SeverityBadge';
+export * from './ServiceStatusBadge';
 export * from './ErrorBoundary';
 export * from './Modal';
 

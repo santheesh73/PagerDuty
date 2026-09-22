@@ -1,24 +1,15 @@
 import React from 'react';
-import { Edit2, ShieldAlert, CheckCircle2, AlertTriangle, Wrench } from 'lucide-react';
-import { Service, ServiceStatus } from '../../types/service';
+import { Edit2 } from 'lucide-react';
+import { Service } from '../../types/service';
 import { Badge } from '../shared/Badge';
 import { Button } from '../shared/Button';
 import { EmptyState } from '../shared/EmptyState';
+import { ServiceStatusBadge } from '../shared/ServiceStatusBadge';
 
 export interface ServiceTableProps {
   services: Service[];
   onEdit: (service: Service) => void;
 }
-
-const statusConfig: Record<
-  ServiceStatus,
-  { label: string; badgeVariant: 'success' | 'warning' | 'error' | 'info'; icon: React.FC<{ className?: string }> }
-> = {
-  HEALTHY: { label: 'Healthy', badgeVariant: 'success', icon: CheckCircle2 },
-  DEGRADED: { label: 'Degraded', badgeVariant: 'warning', icon: AlertTriangle },
-  DOWN: { label: 'Down', badgeVariant: 'error', icon: ShieldAlert },
-  MAINTENANCE: { label: 'Maintenance', badgeVariant: 'info', icon: Wrench },
-};
 
 
 export const ServiceTable: React.FC<ServiceTableProps> = ({ services, onEdit }) => {
@@ -46,13 +37,6 @@ export const ServiceTable: React.FC<ServiceTableProps> = ({ services, onEdit }) 
         </thead>
         <tbody className="divide-y divide-slate-800/60 font-normal">
           {services.map((service) => {
-            const statusInfo = statusConfig[service.status] || {
-              label: service.status,
-              badgeVariant: 'info',
-              icon: ShieldAlert,
-            };
-            const StatusIcon = statusInfo.icon;
-
             return (
               <tr
                 key={service.id}
@@ -67,10 +51,7 @@ export const ServiceTable: React.FC<ServiceTableProps> = ({ services, onEdit }) 
                   )}
                 </td>
                 <td className="py-3.5 px-4">
-                  <div className="inline-flex items-center gap-1.5">
-                    <StatusIcon className="w-4 h-4 text-slate-400 shrink-0" />
-                    <Badge variant={statusInfo.badgeVariant}>{statusInfo.label}</Badge>
-                  </div>
+                  <ServiceStatusBadge status={service.status} />
                 </td>
                 <td className="py-3.5 px-4 text-slate-300">
                   {service.team ? (

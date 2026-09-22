@@ -8,7 +8,9 @@ import {
   useResolveIncident,
   useReopenIncident,
 } from '../../hooks/useIncidents';
-import { CheckCircle2, CheckCheck, RotateCcw, AlertTriangle, X } from 'lucide-react';
+import { Modal } from '../shared/Modal';
+import { Button } from '../shared/Button';
+import { CheckCircle2, CheckCheck, RotateCcw, AlertTriangle, X, Check } from 'lucide-react';
 
 export interface IncidentActionsProps {
   incident: Incident;
@@ -21,7 +23,9 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isConflict, setIsConflict] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
 
   const acknowledgeMutation = useAcknowledgeIncident();
   const resolveMutation = useResolveIncident();
@@ -50,6 +54,7 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
     }
 
     setErrorMessage(msg);
+    setSuccessMessage(null);
     setIsConflict(conflict);
 
     // When 409 or any error occurs, synchronize client cache with the authoritative backend state
@@ -60,9 +65,11 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
 
   const handleAcknowledge = () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsConflict(false);
     acknowledgeMutation.mutate(incident.id, {
       onSuccess: () => {
+        setSuccessMessage('Incident successfully acknowledged.');
         onActionSuccess?.();
       },
       onError: handleError,
@@ -71,9 +78,11 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
 
   const handleResolve = () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsConflict(false);
     resolveMutation.mutate(incident.id, {
       onSuccess: () => {
+        setSuccessMessage('Incident successfully resolved.');
         onActionSuccess?.();
       },
       onError: handleError,
@@ -82,9 +91,12 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
 
   const handleReopen = () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsConflict(false);
+    setShowReopenConfirm(false);
     reopenMutation.mutate(incident.id, {
       onSuccess: () => {
+        setSuccessMessage('Incident reopened. Escalation restarted from Level 1.');
         onActionSuccess?.();
       },
       onError: handleError,
@@ -93,6 +105,26 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
 
   return (
     <div className="space-y-3">
+      {/* Success Feedback Banner */}
+      {successMessage && (
+        <div
+          role="status"
+          className="p-3 rounded-lg border text-xs flex items-center justify-between gap-2 bg-emerald-950/60 border-emerald-800 text-emerald-200 animate-in fade-in duration-150"
+        >
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 shrink-0 text-emerald-400" aria-hidden="true" />
+            <p className="font-medium">{successMessage}</p>
+          </div>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-400 hover:text-white p-1 rounded transition-colors"
+            aria-label="Dismiss message"
+          >
+            <X className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* Error / Conflict Alert Banner */}
       {errorMessage && (
         <div
@@ -154,9 +186,11 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
           disabled={isResolved || isPending}
           onClick={handleResolve}
           className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-emerald-500 disabled:opacity-40 disabled:pointer-events-none ${
-            !isResolved
+            isAcknowledged
               ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-500/20'
-              : 'bg-slate-800 text-slate-400 border border-slate-700'
+              : !isResolved
+              ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+              : 'bg-slate-800 text-slate-500 border border-slate-700'
           }`}
         >
           <CheckCheck className="w-4 h-4" aria-hidden="true" />
@@ -172,7 +206,7 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
           <button
             type="button"
             disabled={isPending}
-            onClick={handleReopen}
+            onClick={() => setShowReopenConfirm(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider bg-rose-600 hover:bg-rose-500 text-white shadow-sm hover:shadow-rose-500/20 transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 focus:ring-rose-500 disabled:opacity-40 disabled:pointer-events-none"
           >
             <RotateCcw className="w-4 h-4" aria-hidden="true" />
@@ -180,6 +214,40 @@ export const IncidentActions: React.FC<IncidentActionsProps> = ({
           </button>
         )}
       </div>
+
+      {/* Reopen Confirmation Dialog */}
+      <Modal
+        isOpen={showReopenConfirm}
+        onClose={() => setShowReopenConfirm(false)}
+        title="Reopen Incident"
+        subtitle="This action resets the incident lifecycle and restarts escalation automation."
+        maxWidth="md"
+      >
+        <div className="space-y-4 pt-1">
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Reopening will transition this incident back to <strong className="text-rose-400">TRIGGERED</strong> status, increment the automation generation, and re-enqueue Level 1 escalation notifications.
+          </p>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReopenConfirm(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleReopen}
+              isLoading={reopenMutation.isPending}
+            >
+              Confirm Reopen
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

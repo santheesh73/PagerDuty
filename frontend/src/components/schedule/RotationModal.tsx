@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CreateRotationInput } from '../../types/schedule';
 import { User } from '../../types/user';
+import { ApiError } from '../../types/api';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
 
@@ -28,6 +29,7 @@ export const RotationModal: React.FC<RotationModalProps> = ({
   const [endTime, setEndTime] = useState('');
   const [isOverride, setIsOverride] = useState(initialIsOverride);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     setIsOverride(initialIsOverride);
@@ -45,12 +47,14 @@ export const RotationModal: React.FC<RotationModalProps> = ({
       setStartTime(toLocalISO(inOneHour));
       setEndTime(toLocalISO(inOneDay));
       setError(null);
+      setFieldErrors({});
     }
   }, [isOpen, initialIsOverride, users]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (!userId) {
       setError('Please select an assigned user.');
@@ -79,13 +83,22 @@ export const RotationModal: React.FC<RotationModalProps> = ({
       });
       onClose();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'detail' in err
-          ? String((err as { detail: unknown }).detail)
-          : 'Failed to create schedule shift. Please check input parameters.';
-      setError(message);
+      if (err instanceof ApiError) {
+        if (err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+          setFieldErrors(err.fieldErrors);
+        }
+        if (!err.fieldErrors || Object.keys(err.fieldErrors).length === 0 || err.fieldErrors.non_field_errors) {
+          setError(err.message);
+        }
+      } else {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'detail' in err
+            ? String((err as { detail: unknown }).detail)
+            : 'Failed to create schedule shift. Please check input parameters.';
+        setError(message);
+      }
     }
   };
 
@@ -132,6 +145,12 @@ export const RotationModal: React.FC<RotationModalProps> = ({
               </option>
             ))}
           </select>
+          {fieldErrors.user_id && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.user_id[0]}</p>
+          )}
+          {fieldErrors.user && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.user[0]}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -150,6 +169,9 @@ export const RotationModal: React.FC<RotationModalProps> = ({
               onChange={(e) => setStartTime(e.target.value)}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+            {fieldErrors.start_time && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.start_time[0]}</p>
+            )}
           </div>
 
           <div>
@@ -167,6 +189,9 @@ export const RotationModal: React.FC<RotationModalProps> = ({
               onChange={(e) => setEndTime(e.target.value)}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+            {fieldErrors.end_time && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.end_time[0]}</p>
+            )}
           </div>
         </div>
 

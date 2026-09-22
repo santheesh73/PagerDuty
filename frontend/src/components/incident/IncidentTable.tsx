@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Incident } from '../../types/incident';
 import { StatusBadge } from '../shared/StatusBadge';
 import { SeverityBadge } from '../shared/SeverityBadge';
-import { formatRelativeTime, formatDateTime } from '../../lib/format';
+import { formatRelativeTime, formatDateTime, formatIncidentId } from '../../lib/format';
 import { AlertCircle, User, Bell, ChevronRight } from 'lucide-react';
 
 export interface IncidentTableProps {
@@ -91,8 +91,8 @@ export const IncidentTable: React.FC<IncidentTableProps> = ({
                   role="row"
                   aria-label={`Incident ${incident.id}: ${incident.title}`}
                 >
-                  <td className="py-3.5 px-4 font-mono text-xs font-medium text-slate-400 group-hover:text-indigo-400 transition-colors">
-                    #{incident.id}
+                  <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-400 group-hover:text-indigo-400 transition-colors whitespace-nowrap">
+                    {formatIncidentId(incident.id)}
                   </td>
                   <td className="py-3.5 px-4">
                     <SeverityBadge severity={incident.severity} />

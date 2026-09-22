@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CreateServiceInput, Service, ServiceStatus, UpdateServiceInput } from '../../types/service';
 import { Team } from '../../types/user';
 import { EscalationPolicy } from '../../types/escalation';
+import { ApiError } from '../../types/api';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
 
@@ -36,6 +37,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
   const [status, setStatus] = useState<ServiceStatus>('HEALTHY');
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (service) {
@@ -56,6 +58,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
       setIsActive(true);
     }
     setError(null);
+    setFieldErrors({});
   }, [service, isOpen, teams]);
 
   const handleNameChange = (val: string) => {
@@ -72,6 +75,7 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (!name.trim()) {
       setError('Service name is required.');
@@ -110,13 +114,22 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
       }
       onClose();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'detail' in err
-          ? String((err as { detail: unknown }).detail)
-          : 'Failed to save service. Please try again.';
-      setError(message);
+      if (err instanceof ApiError) {
+        if (err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+          setFieldErrors(err.fieldErrors);
+        }
+        if (!err.fieldErrors || Object.keys(err.fieldErrors).length === 0 || err.fieldErrors.non_field_errors) {
+          setError(err.message);
+        }
+      } else {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'detail' in err
+            ? String((err as { detail: unknown }).detail)
+            : 'Failed to save service. Please try again.';
+        setError(message);
+      }
     }
   };
 
@@ -151,6 +164,9 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
             placeholder="e.g. Payments Gateway"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
+          {fieldErrors.name && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name[0]}</p>
+          )}
         </div>
 
         <div>
@@ -166,6 +182,9 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
             placeholder="e.g. payments-gateway"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
+          {fieldErrors.slug && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.slug[0]}</p>
+          )}
         </div>
 
         <div>
@@ -201,6 +220,12 @@ export const ServiceModal: React.FC<ServiceModalProps> = ({
                 </option>
               ))}
             </select>
+            {fieldErrors.team_id && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.team_id[0]}</p>
+            )}
+            {fieldErrors.team && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.team[0]}</p>
+            )}
           </div>
 
           <div>

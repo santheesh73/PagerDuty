@@ -54,7 +54,7 @@ describe('IncidentDetail Page', () => {
     );
 
     expect(await screen.findByText('Redis Cluster Split Brain')).toBeInTheDocument();
-    expect(screen.getByText('#42')).toBeInTheDocument();
+    expect(screen.getByText('INC-0042')).toBeInTheDocument();
     expect(screen.getByText('Back to Incidents')).toBeInTheDocument();
     expect(screen.getAllByText('Caching Tier').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('DevOps OnCall')).toBeInTheDocument();

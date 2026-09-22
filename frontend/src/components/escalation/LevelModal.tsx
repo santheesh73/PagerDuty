@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CreateEscalationLevelInput, EscalationTargetType } from '../../types/escalation';
 import { User } from '../../types/user';
+import { ApiError } from '../../types/api';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
 
@@ -27,6 +28,7 @@ export const LevelModal: React.FC<LevelModalProps> = ({
   const [targetUser, setTargetUser] = useState<number | ''>('');
   const [waitMinutes, setWaitMinutes] = useState<number>(15);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -34,12 +36,14 @@ export const LevelModal: React.FC<LevelModalProps> = ({
       setTargetUser(users.length > 0 ? users[0].id : '');
       setWaitMinutes(15);
       setError(null);
+      setFieldErrors({});
     }
   }, [isOpen, users]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (targetType === 'USER' && !targetUser) {
       setError('Please select a target user for direct escalation.');
@@ -61,13 +65,22 @@ export const LevelModal: React.FC<LevelModalProps> = ({
       });
       onClose();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'detail' in err
-          ? String((err as { detail: unknown }).detail)
-          : 'Failed to add escalation step.';
-      setError(message);
+      if (err instanceof ApiError) {
+        if (err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+          setFieldErrors(err.fieldErrors);
+        }
+        if (!err.fieldErrors || Object.keys(err.fieldErrors).length === 0 || err.fieldErrors.non_field_errors) {
+          setError(err.message);
+        }
+      } else {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'detail' in err
+            ? String((err as { detail: unknown }).detail)
+            : 'Failed to add escalation step.';
+        setError(message);
+      }
     }
   };
 
@@ -148,6 +161,9 @@ export const LevelModal: React.FC<LevelModalProps> = ({
                 </option>
               ))}
             </select>
+            {fieldErrors.target_user && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.target_user[0]}</p>
+            )}
           </div>
         )}
 
@@ -168,6 +184,9 @@ export const LevelModal: React.FC<LevelModalProps> = ({
             placeholder="15"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          {fieldErrors.wait_minutes && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.wait_minutes[0]}</p>
+          )}
           <p className="text-xs text-slate-500 mt-1">
             Minutes the engine waits before advancing to Step {nextOrder + 1} if unacknowledged.
           </p>

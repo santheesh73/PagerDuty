@@ -114,11 +114,11 @@ export const PolicyDetail: React.FC<PolicyDetailProps> = ({
               const isLast = idx === levels.length - 1;
 
               return (
-                <div
-                  key={level.id}
-                  data-testid={`level-card-${level.id}`}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors"
-                >
+                <React.Fragment key={level.id}>
+                  <div
+                    data-testid={`level-card-${level.id}`}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors"
+                  >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-semibold text-sm shrink-0">
                       {idx + 1}
@@ -140,14 +140,25 @@ export const PolicyDetail: React.FC<PolicyDetailProps> = ({
                             User: {level.target_username || `ID ${level.target_user}`}
                           </Badge>
                         )}
+                        {isLast && (
+                          <Badge variant="warning">
+                            Final Tier
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-400">
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span>
-                          Notify responder. If unacknowledged, escalate after{' '}
-                          <strong className="text-slate-200">{level.wait_minutes} min</strong>.
-                        </span>
+                        {isLast ? (
+                          <span>
+                            Wait <strong className="text-slate-200">{level.wait_minutes} min</strong> · <span className="text-amber-300 font-medium">Final level</span> (escalation exhausts if unacknowledged).
+                          </span>
+                        ) : (
+                          <span>
+                            Notify responder. If unacknowledged, escalate after{' '}
+                            <strong className="text-slate-200">{level.wait_minutes} min</strong>.
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -184,6 +195,16 @@ export const PolicyDetail: React.FC<PolicyDetailProps> = ({
                     </Button>
                   </div>
                 </div>
+
+                {!isLast && (
+                  <div className="flex items-center justify-center my-1 text-indigo-400" aria-hidden="true">
+                    <div className="flex flex-col items-center">
+                      <div className="w-0.5 h-2.5 bg-indigo-500/40" />
+                      <ArrowDown className="w-3.5 h-3.5 text-indigo-400" />
+                    </div>
+                  </div>
+                )}
+                </React.Fragment>
               );
             })}
           </div>

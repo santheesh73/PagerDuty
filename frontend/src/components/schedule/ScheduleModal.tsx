@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CreateScheduleInput } from '../../types/schedule';
 import { Team } from '../../types/user';
+import { ApiError } from '../../types/api';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
 
@@ -41,6 +42,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [isPrimary, setIsPrimary] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -51,6 +53,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setIsPrimary(false);
       setIsActive(true);
       setError(null);
+      setFieldErrors({});
     }
   }, [isOpen, teams]);
 
@@ -66,6 +69,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (!name.trim()) {
       setError('Schedule name is required.');
@@ -91,13 +95,22 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
       });
       onClose();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'object' && err !== null && 'detail' in err
-          ? String((err as { detail: unknown }).detail)
-          : 'Failed to create schedule. Please check input.';
-      setError(message);
+      if (err instanceof ApiError) {
+        if (err.fieldErrors && Object.keys(err.fieldErrors).length > 0) {
+          setFieldErrors(err.fieldErrors);
+        }
+        if (!err.fieldErrors || Object.keys(err.fieldErrors).length === 0 || err.fieldErrors.non_field_errors) {
+          setError(err.message);
+        }
+      } else {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'object' && err !== null && 'detail' in err
+            ? String((err as { detail: unknown }).detail)
+            : 'Failed to create schedule. Please check input.';
+        setError(message);
+      }
     }
   };
 
@@ -132,6 +145,9 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
             placeholder="e.g. SRE Primary Tier-1"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          {fieldErrors.name && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name[0]}</p>
+          )}
         </div>
 
         <div>
@@ -147,6 +163,9 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
             placeholder="e.g. sre-primary-tier-1"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          {fieldErrors.slug && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.slug[0]}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -168,6 +187,12 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 </option>
               ))}
             </select>
+            {fieldErrors.team_id && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.team_id[0]}</p>
+            )}
+            {fieldErrors.team && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.team[0]}</p>
+            )}
           </div>
 
           <div>

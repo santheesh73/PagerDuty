@@ -120,6 +120,9 @@ describe('IncidentActions Component', () => {
     const reopenButton = screen.getByRole('button', { name: /reopen incident/i });
     await user.click(reopenButton);
 
+    const confirmButton = screen.getByRole('button', { name: /confirm reopen/i });
+    await user.click(confirmButton);
+
     expect(reopenSpy).toHaveBeenCalledWith(101);
   });
 
