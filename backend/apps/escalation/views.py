@@ -28,7 +28,11 @@ class EscalationPolicyViewSet(viewsets.ModelViewSet):
 
         team_param = self.request.query_params.get("team")
         if team_param:
-            qs = qs.filter(team_id=team_param)
+            cleaned_team = str(team_param).strip()
+            if cleaned_team.isdigit():
+                qs = qs.filter(team_id=int(cleaned_team))
+            else:
+                qs = qs.none()
 
         is_active_param = self.request.query_params.get("is_active")
         if is_active_param is not None:
@@ -86,7 +90,11 @@ class EscalationLevelViewSet(viewsets.ModelViewSet):
 
         policy_param = self.request.query_params.get("policy")
         if policy_param:
-            qs = qs.filter(policy_id=policy_param)
+            cleaned_policy = str(policy_param).strip()
+            if cleaned_policy.isdigit():
+                qs = qs.filter(policy_id=int(cleaned_policy))
+            else:
+                qs = qs.none()
 
         target_type_param = self.request.query_params.get("target_type")
         if target_type_param:

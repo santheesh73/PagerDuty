@@ -21,7 +21,11 @@ class ServiceViewSet(viewsets.ModelViewSet):
 
         team_param = self.request.query_params.get("team")
         if team_param:
-            qs = qs.filter(team_id=team_param)
+            cleaned_team = str(team_param).strip()
+            if cleaned_team.isdigit():
+                qs = qs.filter(team_id=int(cleaned_team))
+            else:
+                qs = qs.none()
 
         status_param = self.request.query_params.get("status")
         if status_param:

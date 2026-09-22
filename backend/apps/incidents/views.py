@@ -40,7 +40,11 @@ class IncidentViewSet(
 
         service_param = self.request.query_params.get("service")
         if service_param:
-            qs = qs.filter(service_id=service_param)
+            cleaned_service = str(service_param).strip()
+            if cleaned_service.isdigit():
+                qs = qs.filter(service_id=int(cleaned_service))
+            else:
+                qs = qs.none()
 
         severity_param = self.request.query_params.get("severity")
         if severity_param:
