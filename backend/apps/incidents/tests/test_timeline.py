@@ -1,4 +1,5 @@
 import pytest
+from django.core.exceptions import ValidationError
 from django.db.models.deletion import ProtectedError
 
 from apps.alerts.models import Alert
@@ -74,3 +75,40 @@ def test_incident_deletion_protected_when_events_exist(service):
 
     with pytest.raises(ProtectedError):
         inc.delete()
+
+
+@pytest.mark.django_db
+def test_incident_event_cannot_be_modified(service):
+    """Verify that calling .save() on an existing IncidentEvent raises ValidationError."""
+    inc = Incident.objects.create(
+        service=service,
+        title="Production incident for immutability test",
+        severity=Incident.Severity.HIGH,
+        fingerprint="immutability_fp",
+    )
+    event = IncidentEvent.objects.create(
+        incident=inc,
+        event_type=IncidentEvent.EventType.INCIDENT_TRIGGERED,
+    )
+
+    event.metadata = {"tampered": True}
+    with pytest.raises(ValidationError, match="append-only and cannot be modified"):
+        event.save()
+
+
+@pytest.mark.django_db
+def test_incident_event_cannot_be_deleted(service):
+    """Verify that calling .delete() on an IncidentEvent raises ValidationError."""
+    inc = Incident.objects.create(
+        service=service,
+        title="Production incident for deletion test",
+        severity=Incident.Severity.HIGH,
+        fingerprint="deletion_fp",
+    )
+    event = IncidentEvent.objects.create(
+        incident=inc,
+        event_type=IncidentEvent.EventType.INCIDENT_TRIGGERED,
+    )
+
+    with pytest.raises(ValidationError, match="append-only and cannot be deleted"):
+        event.delete()

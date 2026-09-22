@@ -1,4 +1,5 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
+
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -36,8 +37,8 @@ def scheduling_api_setup(db):
     r1 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -45,8 +46,8 @@ def scheduling_api_setup(db):
     r2 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 

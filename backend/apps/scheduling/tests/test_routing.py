@@ -1,12 +1,13 @@
-from datetime import datetime, timezone as dt_timezone
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import patch
+
+import pytest
 
 from apps.alerts.models import Alert
 from apps.alerts.triage import triage_alert
 from apps.incidents.models import Incident, IncidentEvent
 from apps.scheduling.models import Schedule, ScheduleRotation
-from apps.scheduling.services import assign_incident_on_creation, get_routing_schedule
+from apps.scheduling.services import assign_incident_on_creation
 from apps.services.models import Service
 from apps.users.models import Team, TeamMembership, User
 
@@ -39,8 +40,8 @@ def routing_setup(db):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -48,8 +49,8 @@ def routing_setup(db):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 22, 1, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 22, 1, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -67,7 +68,7 @@ def test_automatic_routing_on_new_incident_creation(routing_setup):
     service = routing_setup["service"]
     alice = routing_setup["alice"]
 
-    fixed_now = datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc)
+    fixed_now = datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=fixed_now):
         alert = Alert.objects.create(
             service=service,
@@ -111,7 +112,7 @@ def test_assignment_stability_when_duplicate_alert_attaches_mid_rotation(routing
     schedule = routing_setup["schedule"]
 
     # 1. 09:30: Alert 1 arrives, Alice on-call
-    t_0930 = datetime(2026, 9, 21, 9, 30, 0, tzinfo=dt_timezone.utc)
+    t_0930 = datetime(2026, 9, 21, 9, 30, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_0930):
         alert1 = Alert.objects.create(
             service=service,
@@ -128,13 +129,13 @@ def test_assignment_stability_when_duplicate_alert_attaches_mid_rotation(routing
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
     # 3. 10:05: Duplicate Alert arrives
-    t_1005 = datetime(2026, 9, 21, 10, 5, 0, tzinfo=dt_timezone.utc)
+    t_1005 = datetime(2026, 9, 21, 10, 5, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1005):
         alert2 = Alert.objects.create(
             service=service,
@@ -157,7 +158,7 @@ def test_no_on_call_responder_records_routing_unavailable(routing_setup):
     service = routing_setup["service"]
 
     # Trigger at 03:00 (outside all rotation windows)
-    t_0300 = datetime(2026, 9, 21, 3, 0, 0, tzinfo=dt_timezone.utc)
+    t_0300 = datetime(2026, 9, 21, 3, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_0300):
         alert = Alert.objects.create(
             service=service,
@@ -185,7 +186,7 @@ def test_no_primary_schedule_records_routing_unavailable(routing_setup):
     schedule.is_primary = False
     schedule.save()
 
-    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc)
+    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1000):
         alert = Alert.objects.create(
             service=service,
@@ -205,7 +206,7 @@ def test_routing_idempotency(routing_setup):
     service = routing_setup["service"]
     alice = routing_setup["alice"]
 
-    t = datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc)
+    t = datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC)
     incident = Incident.objects.create(
         service=service,
         title="Test Incident",
@@ -236,12 +237,12 @@ def test_override_routing_assigns_override_user(routing_setup):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
-    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=dt_timezone.utc)
+    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1300):
         alert = Alert.objects.create(
             service=service,

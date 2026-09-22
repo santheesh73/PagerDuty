@@ -1,6 +1,7 @@
-from datetime import datetime, timezone as dt_timezone
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import patch
+
+import pytest
 
 from apps.alerts.models import Alert
 from apps.alerts.triage import triage_alert
@@ -41,8 +42,8 @@ def golden_setup(db):
     r_alice = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -50,8 +51,8 @@ def golden_setup(db):
     r_bob = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 23, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 23, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -72,7 +73,7 @@ def test_scenario_a_incident_triggered_at_1000(golden_setup):
     service = golden_setup["service"]
     alice = golden_setup["alice"]
 
-    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc)
+    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1000):
         alert = Alert.objects.create(
             service=service,
@@ -98,12 +99,12 @@ def test_scenario_b_override_at_1300(golden_setup):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
-    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=dt_timezone.utc)
+    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1300):
         alert = Alert.objects.create(
             service=service,
@@ -134,7 +135,7 @@ def test_scenario_c_assignment_stability_mid_incident(golden_setup):
     bob = golden_setup["bob"]
 
     # 1. 10:00 Incident created
-    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc)
+    t_1000 = datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1000):
         alert1 = Alert.objects.create(
             service=service,
@@ -151,13 +152,13 @@ def test_scenario_c_assignment_stability_mid_incident(golden_setup):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 11, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 15, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 11, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 15, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
     # 3. Duplicate Alert at 11:30
-    t_1130 = datetime(2026, 9, 21, 11, 30, 0, tzinfo=dt_timezone.utc)
+    t_1130 = datetime(2026, 9, 21, 11, 30, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1130):
         alert2 = Alert.objects.create(
             service=service,
@@ -178,7 +179,7 @@ def test_scenario_d_no_matching_rotation(golden_setup):
     """Scenario D: Incident triggered at 02:00 -> No rotation matches -> assigned_user=null, no crash."""
     service = golden_setup["service"]
 
-    t_0200 = datetime(2026, 9, 21, 2, 0, 0, tzinfo=dt_timezone.utc)
+    t_0200 = datetime(2026, 9, 21, 2, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_0200):
         alert = Alert.objects.create(
             service=service,
@@ -204,7 +205,7 @@ def test_scenario_e_exact_boundary_handoff(golden_setup):
     service = golden_setup["service"]
     bob = golden_setup["bob"]
 
-    t_1700 = datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc)
+    t_1700 = datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1700):
         alert = Alert.objects.create(
             service=service,
@@ -230,8 +231,8 @@ def test_scenario_f_overlapping_base_rotation_rejected(golden_setup):
         ScheduleRotation.objects.create(
             schedule=schedule,
             user=bob,
-            start_time=datetime(2026, 9, 21, 16, 0, 0, tzinfo=dt_timezone.utc),
-            end_time=datetime(2026, 9, 21, 20, 0, 0, tzinfo=dt_timezone.utc),
+            start_time=datetime(2026, 9, 21, 16, 0, 0, tzinfo=UTC),
+            end_time=datetime(2026, 9, 21, 20, 0, 0, tzinfo=UTC),
             is_override=False,
         )
 
@@ -253,13 +254,13 @@ def test_scenario_g_base_and_override_interplay(golden_setup):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
-    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=dt_timezone.utc)
-    t_1400 = datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc)
+    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=UTC)
+    t_1400 = datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC)
 
     assert get_on_call(schedule, t_1300) == bob
     assert get_on_call(schedule, t_1400) == alice

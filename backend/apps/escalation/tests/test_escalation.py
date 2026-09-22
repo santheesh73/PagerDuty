@@ -1,9 +1,8 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from apps.escalation.models import EscalationLevel, EscalationPolicy
 from apps.escalation.services import start_incident_escalation
@@ -31,19 +30,18 @@ def escalation_env():
     schedule = Schedule.objects.create(name="Primary Schedule", slug="backend-sched", team=team, is_primary=True, is_active=True)
 
     # Alice on call 09:00 - 17:00, Bob on call 17:00 - 01:00 on 2026-09-21
-    ref_day = datetime(2026, 9, 21, tzinfo=dt_timezone.utc)
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
         is_override=False,
     )
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 22, 1, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 22, 1, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -84,7 +82,7 @@ def escalation_env():
 
 @pytest.mark.django_db
 def test_initial_automation_starts_level_1_and_assigns_on_call(escalation_env):
-    trigger_time = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
+    trigger_time = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
     incident = Incident.objects.create(
         service=escalation_env["service"],
         title="High CPU on Orders",
@@ -93,8 +91,8 @@ def test_initial_automation_starts_level_1_and_assigns_on_call(escalation_env):
         triggered_at=trigger_time,
     )
 
-    with patch("apps.escalation.tasks.check_and_escalate.apply_async") as mock_schedule, \
-         patch("apps.notifications.tasks.dispatch_notification.delay") as mock_dispatch:
+    with patch("apps.escalation.tasks.check_and_escalate.apply_async"), \
+         patch("apps.notifications.tasks.dispatch_notification.delay"):
         started = start_incident_escalation(incident, trigger_time)
         assert started is True
 
@@ -117,7 +115,7 @@ def test_initial_automation_starts_level_1_and_assigns_on_call(escalation_env):
 
 @pytest.mark.django_db
 def test_normal_escalation_advances_level_1_to_level_2(escalation_env):
-    trigger_time = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
+    trigger_time = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
     incident = Incident.objects.create(
         service=escalation_env["service"],
         title="Payment gateway timeout",
@@ -128,8 +126,8 @@ def test_normal_escalation_advances_level_1_to_level_2(escalation_env):
         triggered_at=trigger_time,
     )
 
-    with patch("apps.escalation.tasks.check_and_escalate.apply_async") as mock_schedule, \
-         patch("apps.notifications.tasks.dispatch_notification.delay") as mock_dispatch:
+    with patch("apps.escalation.tasks.check_and_escalate.apply_async"), \
+         patch("apps.notifications.tasks.dispatch_notification.delay"):
         res = check_and_escalate(incident.id, escalation_env["level_1"].id, incident.automation_generation)
         assert res is True
 
@@ -161,7 +159,7 @@ def test_final_level_exhaustion_records_event_and_halts(escalation_env):
         current_escalation_level=escalation_env["level_2"],
     )
 
-    with patch("apps.escalation.tasks.check_and_escalate.apply_async") as mock_schedule:
+    with patch("apps.escalation.tasks.check_and_escalate.apply_async"):
         res = check_and_escalate(incident.id, escalation_env["level_2"].id, incident.automation_generation)
         assert res is False
 
@@ -197,7 +195,7 @@ def test_target_changes_with_schedule_on_current_on_call(escalation_env):
     with patch("django.utils.timezone.now") as mock_now, \
          patch("apps.escalation.tasks.check_and_escalate.apply_async"), \
          patch("apps.notifications.tasks.dispatch_notification.delay"):
-        mock_now.return_value = datetime(2026, 9, 21, 18, 0, tzinfo=dt_timezone.utc)
+        mock_now.return_value = datetime(2026, 9, 21, 18, 0, tzinfo=UTC)
         res = check_and_escalate(incident.id, escalation_env["level_1"].id, incident.automation_generation)
         assert res is True
 

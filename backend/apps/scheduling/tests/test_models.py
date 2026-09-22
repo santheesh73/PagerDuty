@@ -1,9 +1,14 @@
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, datetime
+
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from apps.scheduling.exceptions import IneligibleUserError, InvalidTimestampError, RotationOverlapError
+from apps.scheduling.exceptions import (
+    IneligibleUserError,
+    InvalidTimestampError,
+    RotationOverlapError,
+)
 from apps.scheduling.models import Schedule, ScheduleRotation
 from apps.users.models import Team, TeamMembership, User
 
@@ -104,7 +109,7 @@ def test_rotation_end_time_must_be_after_start_time():
     TeamMembership.objects.create(team=team, user=user)
     schedule = Schedule.objects.create(name="Sched", slug="sched", team=team)
 
-    t = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
+    t = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
     with pytest.raises((ValidationError, IntegrityError)):
         ScheduleRotation.objects.create(
             schedule=schedule,
@@ -139,8 +144,8 @@ def test_rotation_inactive_user_rejected():
     TeamMembership.objects.create(team=team, user=user)
     schedule = Schedule.objects.create(name="Sched", slug="sched", team=team)
 
-    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
-    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=dt_timezone.utc)
+    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=UTC)
     with pytest.raises(IneligibleUserError):
         ScheduleRotation.objects.create(
             schedule=schedule,
@@ -158,8 +163,8 @@ def test_rotation_non_team_member_user_rejected():
     TeamMembership.objects.create(team=team2, user=user)
     schedule = Schedule.objects.create(name="Backend Primary", slug="backend-primary", team=team1)
 
-    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
-    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=dt_timezone.utc)
+    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=UTC)
     with pytest.raises(IneligibleUserError):
         ScheduleRotation.objects.create(
             schedule=schedule,
@@ -176,8 +181,8 @@ def test_rotation_inactive_membership_rejected():
     TeamMembership.objects.create(team=team, user=user, is_active=False)
     schedule = Schedule.objects.create(name="Sched", slug="sched", team=team)
 
-    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
-    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=dt_timezone.utc)
+    t1 = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
+    t2 = datetime(2026, 9, 21, 12, 0, tzinfo=UTC)
     with pytest.raises(IneligibleUserError):
         ScheduleRotation.objects.create(
             schedule=schedule,
@@ -200,8 +205,8 @@ def test_base_rotations_overlap_rejected():
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -210,8 +215,8 @@ def test_base_rotations_overlap_rejected():
         ScheduleRotation.objects.create(
             schedule=schedule,
             user=bob,
-            start_time=datetime(2026, 9, 21, 16, 0, tzinfo=dt_timezone.utc),
-            end_time=datetime(2026, 9, 21, 20, 0, tzinfo=dt_timezone.utc),
+            start_time=datetime(2026, 9, 21, 16, 0, tzinfo=UTC),
+            end_time=datetime(2026, 9, 21, 20, 0, tzinfo=UTC),
             is_override=False,
         )
 
@@ -228,8 +233,8 @@ def test_override_rotations_overlap_rejected():
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 12, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, tzinfo=UTC),
         is_override=True,
     )
 
@@ -237,8 +242,8 @@ def test_override_rotations_overlap_rejected():
         ScheduleRotation.objects.create(
             schedule=schedule,
             user=bob,
-            start_time=datetime(2026, 9, 21, 13, 0, tzinfo=dt_timezone.utc),
-            end_time=datetime(2026, 9, 21, 15, 0, tzinfo=dt_timezone.utc),
+            start_time=datetime(2026, 9, 21, 13, 0, tzinfo=UTC),
+            end_time=datetime(2026, 9, 21, 15, 0, tzinfo=UTC),
             is_override=True,
         )
 
@@ -256,8 +261,8 @@ def test_override_overlapping_base_allowed():
     base = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -265,8 +270,8 @@ def test_override_overlapping_base_allowed():
     override = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, tzinfo=UTC),
         is_override=True,
     )
 
@@ -286,15 +291,15 @@ def test_adjacent_rotations_allowed():
     r1 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
         is_override=False,
     )
     r2 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 22, 1, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 22, 1, 0, tzinfo=UTC),
         is_override=False,
     )
     assert r1.id and r2.id

@@ -1,8 +1,9 @@
 import zoneinfo
+
 from rest_framework import serializers
 
 from apps.scheduling.models import Schedule, ScheduleRotation
-from apps.users.models import Team, User, TeamMembership
+from apps.users.models import Team, TeamMembership, User
 from apps.users.serializers import TeamSummarySerializer, UserSummarySerializer
 
 

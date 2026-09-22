@@ -1,4 +1,5 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
+
 import pytest
 
 from apps.scheduling.exceptions import InvalidTimestampError
@@ -28,8 +29,8 @@ def on_call_setup(db):
     r1 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -37,8 +38,8 @@ def on_call_setup(db):
     r2 = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 22, 1, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 22, 1, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -59,21 +60,21 @@ def test_get_on_call_base_rotation_boundaries(on_call_setup):
     bob = on_call_setup["bob"]
 
     # At exact start: 09:00:00 -> Alice
-    assert get_on_call(schedule, datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc)) == alice
+    assert get_on_call(schedule, datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC)) == alice
 
     # Mid shift: 12:00:00 -> Alice
-    assert get_on_call(schedule, datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc)) == alice
+    assert get_on_call(schedule, datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)) == alice
 
     # One second before end: 16:59:59 -> Alice
-    assert get_on_call(schedule, datetime(2026, 9, 21, 16, 59, 59, tzinfo=dt_timezone.utc)) == alice
+    assert get_on_call(schedule, datetime(2026, 9, 21, 16, 59, 59, tzinfo=UTC)) == alice
 
     # At exact handoff: 17:00:00 -> NOT Alice, but Bob!
-    at_1700 = get_on_call(schedule, datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc))
+    at_1700 = get_on_call(schedule, datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC))
     assert at_1700 != alice
     assert at_1700 == bob
 
     # Later in Bob shift: 20:00:00 -> Bob
-    assert get_on_call(schedule, datetime(2026, 9, 21, 20, 0, 0, tzinfo=dt_timezone.utc)) == bob
+    assert get_on_call(schedule, datetime(2026, 9, 21, 20, 0, 0, tzinfo=UTC)) == bob
 
 
 @pytest.mark.django_db
@@ -81,10 +82,10 @@ def test_get_on_call_outside_rotation_windows(on_call_setup):
     schedule = on_call_setup["schedule"]
 
     # Before first rotation: 08:59:59 -> None
-    assert get_on_call(schedule, datetime(2026, 9, 21, 8, 59, 59, tzinfo=dt_timezone.utc)) is None
+    assert get_on_call(schedule, datetime(2026, 9, 21, 8, 59, 59, tzinfo=UTC)) is None
 
     # After last rotation: 01:00:00 next day -> None
-    assert get_on_call(schedule, datetime(2026, 9, 22, 1, 0, 0, tzinfo=dt_timezone.utc)) is None
+    assert get_on_call(schedule, datetime(2026, 9, 22, 1, 0, 0, tzinfo=UTC)) is None
 
 
 @pytest.mark.django_db
@@ -106,7 +107,7 @@ def test_get_on_call_inactive_schedule(on_call_setup):
     schedule.save()
 
     # Active rotation exists, but schedule itself is inactive
-    result = get_on_call(schedule, datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc))
+    result = get_on_call(schedule, datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC))
     assert result is None
 
 
@@ -115,7 +116,7 @@ def test_get_on_call_assignment_metadata(on_call_setup):
     schedule = on_call_setup["schedule"]
     alice = on_call_setup["alice"]
 
-    assignment = get_on_call_assignment(schedule, datetime(2026, 9, 21, 10, 0, 0, tzinfo=dt_timezone.utc))
+    assignment = get_on_call_assignment(schedule, datetime(2026, 9, 21, 10, 0, 0, tzinfo=UTC))
     assert assignment is not None
     assert assignment["user"] == alice
     assert assignment["source"] == "base"

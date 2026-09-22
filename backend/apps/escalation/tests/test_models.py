@@ -188,7 +188,7 @@ def test_escalation_level_current_on_call_rejects_target_user(test_setup):
 
 @pytest.mark.django_db
 def test_protected_deletion_policy_referenced_by_service(test_setup):
-    service = Service.objects.create(
+    Service.objects.create(
         name="Billing API",
         slug="billing-api",
         team=test_setup["team"],
@@ -212,7 +212,7 @@ def test_protected_deletion_level_referenced_by_incident(test_setup):
         target_type=EscalationLevel.TargetType.CURRENT_ON_CALL,
         wait_minutes=10,
     )
-    incident = Incident.objects.create(
+    Incident.objects.create(
         service=service,
         title="Payment outage",
         fingerprint="fp-test-protected",

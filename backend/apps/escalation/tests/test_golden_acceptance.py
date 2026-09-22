@@ -1,10 +1,8 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from rest_framework.test import APIClient
 
 from apps.alerts.models import Alert
 from apps.alerts.triage import triage_alert
@@ -53,12 +51,11 @@ def acceptance_stack():
         is_active=True,
     )
 
-    ref_date = datetime(2026, 9, 21, tzinfo=dt_timezone.utc)
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -116,7 +113,7 @@ def test_scenario_a_submit_alert_triggers_incident_and_pages_level_1(acceptance_
     Scenario A: Submit Alert -> Incident created (TRIGGERED), Level 1 active,
     Alice assigned, Alice Notification created/dispatched, escalation check scheduled.
     """
-    trigger_ts = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
+    trigger_ts = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
 
     with patch("django.utils.timezone.now", return_value=trigger_ts), \
          patch("apps.escalation.tasks.check_and_escalate.apply_async") as mock_escalation_task, \
@@ -133,6 +130,7 @@ def test_scenario_a_submit_alert_triggers_incident_and_pages_level_1(acceptance_
     assert incident.status == Incident.Status.TRIGGERED
     assert incident.current_escalation_level == acceptance_stack["level_1"]
     assert incident.assigned_user == acceptance_stack["alice"]
+    mock_dispatch_task.assert_called_once()
 
     # Verify notification created
     notif = Notification.objects.get(incident=incident, recipient=acceptance_stack["alice"])
@@ -165,6 +163,7 @@ def test_scenario_b_unacknowledged_incident_escalates_to_level_2(acceptance_stac
          patch("apps.notifications.tasks.dispatch_notification.delay") as mock_dispatch_task:
         res = check_and_escalate(incident.id, acceptance_stack["level_1"].id, incident.automation_generation)
         assert res is True
+        mock_dispatch_task.assert_called_once()
 
     incident.refresh_from_db()
     assert incident.current_escalation_level == acceptance_stack["level_2"]
@@ -253,7 +252,7 @@ def test_scenario_e_acknowledge_before_first_timer_prevents_bob_notification(acc
     Scenario E: Create another incident, acknowledge before first timer ->
     Alice notified once, Bob never notified.
     """
-    t_1000 = datetime(2026, 9, 21, 10, 0, tzinfo=dt_timezone.utc)
+    t_1000 = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
     with patch("django.utils.timezone.now", return_value=t_1000):
         alert = Alert.objects.create(
             service=acceptance_stack["service"],

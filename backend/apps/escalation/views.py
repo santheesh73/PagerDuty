@@ -1,7 +1,7 @@
+from django.db import transaction
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction
 
 from .models import EscalationLevel, EscalationPolicy
 from .serializers import EscalationLevelSerializer, EscalationPolicySerializer
@@ -48,7 +48,7 @@ class EscalationPolicyViewSet(viewsets.ModelViewSet):
             )
 
         existing_levels = list(policy.levels.all())
-        existing_ids = {l.id for l in existing_levels}
+        existing_ids = {lvl.id for lvl in existing_levels}
         if set(level_ids) != existing_ids:
             return Response(
                 {"detail": "level_ids must contain exactly the existing levels for this policy."},

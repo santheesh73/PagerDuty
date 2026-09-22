@@ -97,10 +97,18 @@ class ServiceSerializer(serializers.ModelSerializer):
     def validate(self, attrs: dict) -> dict:
         team = attrs.get("team") or (self.instance.team if self.instance else None)
         is_active = attrs.get("is_active", self.instance.is_active if self.instance else True)
+        escalation_policy = attrs.get("escalation_policy") if "escalation_policy" in attrs else (
+            self.instance.escalation_policy if self.instance else None
+        )
 
         if is_active and team and not team.is_active:
             raise serializers.ValidationError(
                 {"team_id": "Cannot assign an active Service to an inactive Team."}
+            )
+
+        if escalation_policy and team and escalation_policy.team_id != team.id:
+            raise serializers.ValidationError(
+                {"escalation_policy_id": "Escalation policy must belong to the same team as the service."}
             )
 
         return attrs

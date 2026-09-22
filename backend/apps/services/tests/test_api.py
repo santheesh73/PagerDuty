@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.escalation.models import EscalationPolicy
 from apps.services.models import Service
 from apps.users.models import Team
 
@@ -143,3 +144,51 @@ def test_retrieve_nonexistent_service_returns_404(client):
     url = reverse("api:service-detail", kwargs={"pk": 99999})
     response = client.get(url)
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_create_service_mismatched_escalation_policy_team_rejected(client, team):
+    """Verify that creating a service with an escalation policy from another team returns 400."""
+    other_team = Team.objects.create(name="Other Team", slug="other-team")
+    other_policy = EscalationPolicy.objects.create(name="Other Policy", slug="other-pol", team=other_team)
+
+    url = reverse("api:service-list")
+    payload = {
+        "name": "Cross-team Service",
+        "slug": "cross-team-svc",
+        "team_id": team.id,
+        "escalation_policy_id": other_policy.id,
+    }
+    response = client.post(url, payload, format="json")
+    assert response.status_code == 400
+    assert "escalation_policy_id" in response.json()
+
+
+@pytest.mark.django_db
+def test_update_service_mismatched_escalation_policy_team_rejected(client, team):
+    """Verify that patching a service with an escalation policy from another team returns 400."""
+    service = Service.objects.create(name="Owned Service", slug="owned-svc", team=team)
+    other_team = Team.objects.create(name="Other Team 2", slug="other-team-2")
+    other_policy = EscalationPolicy.objects.create(name="Other Policy 2", slug="other-pol-2", team=other_team)
+
+    url = reverse("api:service-detail", kwargs={"pk": service.id})
+    response = client.patch(url, {"escalation_policy_id": other_policy.id}, format="json")
+    assert response.status_code == 400
+    assert "escalation_policy_id" in response.json()
+
+
+@pytest.mark.django_db
+def test_create_service_matching_escalation_policy_team_allowed(client, team):
+    """Verify that creating a service with an escalation policy from the same team succeeds."""
+    policy = EscalationPolicy.objects.create(name="Team Policy", slug="team-pol", team=team)
+
+    url = reverse("api:service-list")
+    payload = {
+        "name": "Matching Service",
+        "slug": "matching-svc",
+        "team_id": team.id,
+        "escalation_policy_id": policy.id,
+    }
+    response = client.post(url, payload, format="json")
+    assert response.status_code == 201
+    assert response.json()["escalation_policy"]["slug"] == "team-pol"

@@ -7,6 +7,7 @@ from apps.scheduling.exceptions import InvalidTimestampError
 
 if TYPE_CHECKING:
     from django.contrib.auth import get_user_model
+
     from apps.incidents.models import Incident
     from apps.scheduling.models import Schedule
     from apps.services.models import Service

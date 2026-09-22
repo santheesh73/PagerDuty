@@ -1,5 +1,6 @@
 from datetime import timedelta
-from django.db.models import Avg, Count, F, DurationField, ExpressionWrapper
+
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F
 from django.utils import timezone
 
 from apps.incidents.models import Incident

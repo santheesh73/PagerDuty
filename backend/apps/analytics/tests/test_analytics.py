@@ -1,12 +1,13 @@
 from datetime import timedelta
-from django.utils import timezone
+
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.escalation.models import EscalationLevel, EscalationPolicy
 from apps.incidents.models import Incident
 from apps.services.models import Service
 from apps.users.models import Team, User
-from apps.escalation.models import EscalationPolicy, EscalationLevel
 
 
 @pytest.fixture
@@ -92,6 +93,51 @@ def test_analytics_summary_empty_metrics(api_client, db):
     assert data["active_incidents"] == 0
     assert data["mtta_seconds"] is None
     assert data["mttr_seconds"] is None
+
+
+@pytest.mark.django_db
+def test_analytics_summary_null_semantics_unacknowledged_and_unresolved(api_client, db):
+    """
+    Verify Golden Metric Rule:
+    When incidents exist but none are acknowledged, mtta_seconds is None (NOT 0.0).
+    When incidents exist and are acknowledged but none are resolved, mttr_seconds is None (NOT 0.0).
+    """
+    team = Team.objects.create(name="SRE Team", slug="sre-team", is_active=True)
+    service = Service.objects.create(name="Gateway", slug="gateway", team=team)
+    now = timezone.now()
+
+    # Create only triggered unacknowledged incident
+    inc = Incident.objects.create(
+        service=service,
+        title="Gateway 502",
+        severity=Incident.Severity.CRITICAL,
+        status=Incident.Status.TRIGGERED,
+        fingerprint="gw-fp",
+        triggered_at=now - timedelta(minutes=5),
+        acknowledged_at=None,
+        resolved_at=None,
+    )
+
+    resp1 = api_client.get("/api/analytics/summary/")
+    assert resp1.status_code == 200
+    d1 = resp1.json()
+    assert d1["incident_count"] == 1
+    assert d1["active_incidents"] == 1
+    assert d1["mtta_seconds"] is None
+    assert d1["mttr_seconds"] is None
+
+    # Now acknowledge the incident (acknowledged after 60s), but keep it active/unresolved
+    inc.status = Incident.Status.ACKNOWLEDGED
+    inc.acknowledged_at = inc.triggered_at + timedelta(seconds=60)
+    inc.save(update_fields=["status", "acknowledged_at"])
+
+    resp2 = api_client.get("/api/analytics/summary/")
+    assert resp2.status_code == 200
+    d2 = resp2.json()
+    assert d2["incident_count"] == 1
+    assert d2["active_incidents"] == 1
+    assert d2["mtta_seconds"] == 60.0
+    assert d2["mttr_seconds"] is None
 
 
 @pytest.mark.django_db

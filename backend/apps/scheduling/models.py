@@ -100,7 +100,11 @@ class ScheduleRotation(models.Model):
         super().clean()
         from django.utils import timezone
 
-        from apps.scheduling.exceptions import IneligibleUserError, InvalidTimestampError, RotationOverlapError
+        from apps.scheduling.exceptions import (
+            IneligibleUserError,
+            InvalidTimestampError,
+            RotationOverlapError,
+        )
 
         if self.start_time and timezone.is_naive(self.start_time):
             raise InvalidTimestampError("Rotation start_time must be timezone-aware.")

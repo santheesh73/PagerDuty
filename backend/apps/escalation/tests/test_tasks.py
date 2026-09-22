@@ -2,11 +2,10 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from apps.escalation.models import EscalationLevel, EscalationPolicy
 from apps.escalation.tasks import check_and_escalate
-from apps.incidents.models import Incident, IncidentEvent
+from apps.incidents.models import Incident
 from apps.incidents.services import acknowledge_incident, resolve_incident
 from apps.notifications.models import Notification
 from apps.services.models import Service

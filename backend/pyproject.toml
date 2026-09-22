@@ -37,6 +37,8 @@ exclude = [
     "__pycache__",
     ".pytest_cache",
     "migrations",
+    ".venv",
+    "venv",
 ]
 
 [tool.ruff.lint]

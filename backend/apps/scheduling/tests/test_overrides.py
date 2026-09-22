@@ -1,4 +1,5 @@
-from datetime import datetime, timezone as dt_timezone
+from datetime import UTC, datetime
+
 import pytest
 
 from apps.scheduling.models import Schedule, ScheduleRotation
@@ -27,8 +28,8 @@ def override_setup(db):
     base_rot = ScheduleRotation.objects.create(
         schedule=schedule,
         user=alice,
-        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
         is_override=False,
     )
 
@@ -36,8 +37,8 @@ def override_setup(db):
     override_rot = ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
@@ -69,17 +70,25 @@ def test_override_precedence_timeline(override_setup):
     alice = override_setup["alice"]
     bob = override_setup["bob"]
 
-    t_1100 = datetime(2026, 9, 21, 11, 0, 0, tzinfo=dt_timezone.utc)
-    t_1200 = datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc)
-    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=dt_timezone.utc)
-    t_1400 = datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc)
-    t_1600 = datetime(2026, 9, 21, 16, 0, 0, tzinfo=dt_timezone.utc)
+    t_1100 = datetime(2026, 9, 21, 11, 0, 0, tzinfo=UTC)
+    t_115959 = datetime(2026, 9, 21, 11, 59, 59, tzinfo=UTC)
+    t_1200 = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
+    t_1300 = datetime(2026, 9, 21, 13, 0, 0, tzinfo=UTC)
+    t_135959 = datetime(2026, 9, 21, 13, 59, 59, tzinfo=UTC)
+    t_1400 = datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC)
+    t_1600 = datetime(2026, 9, 21, 16, 0, 0, tzinfo=UTC)
 
     # 11:00 -> Alice (base)
     assert get_on_call(schedule, t_1100) == alice
     res_1100 = get_on_call_assignment(schedule, t_1100)
     assert res_1100["source"] == "base"
     assert res_1100["user"] == alice
+
+    # 11:59:59 -> Alice (1s before override begins)
+    assert get_on_call(schedule, t_115959) == alice
+    res_115959 = get_on_call_assignment(schedule, t_115959)
+    assert res_115959["source"] == "base"
+    assert res_115959["user"] == alice
 
     # 12:00 -> Bob (override begins)
     assert get_on_call(schedule, t_1200) == bob
@@ -92,6 +101,12 @@ def test_override_precedence_timeline(override_setup):
     res_1300 = get_on_call_assignment(schedule, t_1300)
     assert res_1300["source"] == "override"
     assert res_1300["user"] == bob
+
+    # 13:59:59 -> Bob (1s before override ends)
+    assert get_on_call(schedule, t_135959) == bob
+    res_135959 = get_on_call_assignment(schedule, t_135959)
+    assert res_135959["source"] == "override"
+    assert res_135959["user"] == bob
 
     # 14:00 -> Alice (override ends, returns to base!)
     assert get_on_call(schedule, t_1400) == alice
@@ -125,10 +140,10 @@ def test_override_outside_base_rotation(db):
     ScheduleRotation.objects.create(
         schedule=schedule,
         user=bob,
-        start_time=datetime(2026, 9, 21, 20, 0, 0, tzinfo=dt_timezone.utc),
-        end_time=datetime(2026, 9, 21, 22, 0, 0, tzinfo=dt_timezone.utc),
+        start_time=datetime(2026, 9, 21, 20, 0, 0, tzinfo=UTC),
+        end_time=datetime(2026, 9, 21, 22, 0, 0, tzinfo=UTC),
         is_override=True,
     )
 
-    assert get_on_call(schedule, datetime(2026, 9, 21, 21, 0, 0, tzinfo=dt_timezone.utc)) == bob
-    assert get_on_call(schedule, datetime(2026, 9, 21, 19, 0, 0, tzinfo=dt_timezone.utc)) is None
+    assert get_on_call(schedule, datetime(2026, 9, 21, 21, 0, 0, tzinfo=UTC)) == bob
+    assert get_on_call(schedule, datetime(2026, 9, 21, 19, 0, 0, tzinfo=UTC)) is None
