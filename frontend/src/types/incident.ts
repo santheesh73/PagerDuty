@@ -1,9 +1,23 @@
 import { ServiceSummary } from './service';
 import { UserSummary } from './user';
 
-export type IncidentStatus = 'triggered' | 'acknowledged' | 'resolved';
+export type IncidentStatus =
+  | 'TRIGGERED'
+  | 'ACKNOWLEDGED'
+  | 'RESOLVED'
+  | 'triggered'
+  | 'acknowledged'
+  | 'resolved';
 
-export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type IncidentSeverity =
+  | 'LOW'
+  | 'MEDIUM'
+  | 'HIGH'
+  | 'CRITICAL'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
 
 export interface IncidentSummary {
   id: number;

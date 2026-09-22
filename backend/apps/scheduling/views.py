@@ -49,10 +49,13 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         at_param = request.query_params.get("at")
 
         if at_param:
-            parsed_dt = parse_datetime(at_param)
+            clean_at = at_param.strip()
+            if " " in clean_at and "+" not in clean_at:
+                clean_at = clean_at.replace(" ", "+")
+            parsed_dt = parse_datetime(clean_at)
             if parsed_dt is None:
                 try:
-                    parsed_dt = datetime.fromisoformat(at_param.replace("Z", "+00:00"))
+                    parsed_dt = datetime.fromisoformat(clean_at.replace("Z", "+00:00"))
                 except (ValueError, TypeError):
                     return Response(
                         {"detail": f"Invalid ISO 8601 datetime '{at_param}'."},

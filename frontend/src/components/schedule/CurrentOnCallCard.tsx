@@ -56,11 +56,11 @@ export const CurrentOnCallCard: React.FC<CurrentOnCallCardProps> = ({
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            {source === 'OVERRIDE' ? (
+            {source?.toUpperCase() === 'OVERRIDE' ? (
               <Badge variant="warning">
                 Active Override
               </Badge>
-            ) : source === 'BASE' ? (
+            ) : source?.toUpperCase() === 'BASE' ? (
               <Badge variant="info">
                 Standard Rotation
               </Badge>

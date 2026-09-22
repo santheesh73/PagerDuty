@@ -19,6 +19,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Layers,
+  ShieldAlert,
 } from 'lucide-react';
 
 export const IncidentDetail: React.FC = () => {
@@ -157,7 +158,7 @@ export const IncidentDetail: React.FC = () => {
               Incident Context & Attributes
             </h3>
 
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
                 <dt className="text-slate-500 flex items-center gap-1.5 mb-1">
                   <Server className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
@@ -165,6 +166,16 @@ export const IncidentDetail: React.FC = () => {
                 </dt>
                 <dd className="font-semibold text-slate-200">
                   {incident.service?.name || `Service #${incident.service?.id}`}
+                </dd>
+              </div>
+
+              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+                <dt className="text-slate-500 flex items-center gap-1.5 mb-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                  Escalation Tier
+                </dt>
+                <dd className="font-semibold text-indigo-300">
+                  {incident.current_escalation_level ? `Level ${incident.current_escalation_level}` : 'Direct Routing'}
                 </dd>
               </div>
 
@@ -178,7 +189,7 @@ export const IncidentDetail: React.FC = () => {
                 </dd>
               </div>
 
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 sm:col-span-2">
+              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 sm:col-span-3">
                 <dt className="text-slate-500 flex items-center gap-1.5 mb-1">
                   <Fingerprint className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
                   Deterministic Triage Fingerprint

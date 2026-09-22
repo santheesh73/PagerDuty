@@ -46,6 +46,9 @@ class IncidentSerializer(serializers.ModelSerializer):
     service = ServiceSummarySerializer(read_only=True)
     assigned_user = UserSummarySerializer(read_only=True)
     alert_count = serializers.IntegerField(read_only=True, default=0)
+    current_escalation_level = serializers.IntegerField(
+        source="current_escalation_level.order", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = Incident
@@ -56,6 +59,7 @@ class IncidentSerializer(serializers.ModelSerializer):
             "severity",
             "status",
             "assigned_user",
+            "current_escalation_level",
             "fingerprint",
             "triggered_at",
             "acknowledged_at",

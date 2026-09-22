@@ -1,6 +1,10 @@
+from datetime import UTC, datetime
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from apps.escalation.models import EscalationLevel, EscalationPolicy
+from apps.scheduling.models import Schedule, ScheduleRotation
 from apps.services.models import Service
 from apps.users.models import Team, TeamMembership, User
 
@@ -57,6 +61,7 @@ class Command(BaseCommand):
         memberships_data = [
             {"user": users["alice"], "team": teams["backend"], "role": TeamMembership.Role.ENGINEER},
             {"user": users["bob"], "team": teams["backend"], "role": TeamMembership.Role.LEAD},
+            {"user": users["charlie"], "team": teams["backend"], "role": TeamMembership.Role.RESPONDER},
             {"user": users["charlie"], "team": teams["sre"], "role": TeamMembership.Role.RESPONDER},
         ]
         for m_data in memberships_data:
@@ -118,9 +123,6 @@ class Command(BaseCommand):
                 service.save()
             action = "Created" if created else "Ensured"
         # 5. Schedules & Rotations (Phase 4)
-        from datetime import datetime, timezone as dt_timezone
-        from apps.scheduling.models import Schedule, ScheduleRotation
-
         backend_schedule, created = Schedule.objects.get_or_create(
             slug="backend-primary",
             defaults={
@@ -145,20 +147,20 @@ class Command(BaseCommand):
         rotations_data = [
             {
                 "user": users["alice"],
-                "start_time": datetime(2026, 9, 21, 9, 0, 0, tzinfo=dt_timezone.utc),
-                "end_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
+                "start_time": datetime(2026, 9, 21, 9, 0, 0, tzinfo=UTC),
+                "end_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
                 "is_override": False,
             },
             {
                 "user": users["bob"],
-                "start_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=dt_timezone.utc),
-                "end_time": datetime(2026, 9, 22, 1, 0, 0, tzinfo=dt_timezone.utc),
+                "start_time": datetime(2026, 9, 21, 17, 0, 0, tzinfo=UTC),
+                "end_time": datetime(2026, 9, 22, 1, 0, 0, tzinfo=UTC),
                 "is_override": False,
             },
             {
                 "user": users["bob"],
-                "start_time": datetime(2026, 9, 21, 12, 0, 0, tzinfo=dt_timezone.utc),
-                "end_time": datetime(2026, 9, 21, 14, 0, 0, tzinfo=dt_timezone.utc),
+                "start_time": datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+                "end_time": datetime(2026, 9, 21, 14, 0, 0, tzinfo=UTC),
                 "is_override": True,
             },
         ]
@@ -174,8 +176,6 @@ class Command(BaseCommand):
             self.stdout.write(f"  - {action} rotation: {rot}")
 
         # 6. Escalation Policies & Levels (Phase 5)
-        from apps.escalation.models import EscalationLevel, EscalationPolicy
-
         backend_policy, created = EscalationPolicy.objects.get_or_create(
             slug="backend-critical-policy",
             defaults={
@@ -227,6 +227,24 @@ class Command(BaseCommand):
             level_2.save()
         action = "Created" if created else "Ensured"
         self.stdout.write(f"  - {action} level 2: {level_2}")
+
+        # Level 3: Charlie (User target, wait 15 mins)
+        level_3, created = EscalationLevel.objects.get_or_create(
+            policy=backend_policy,
+            order=3,
+            defaults={
+                "target_type": EscalationLevel.TargetType.USER,
+                "target_user": users["charlie"],
+                "wait_minutes": 15,
+            },
+        )
+        if not created:
+            level_3.target_type = EscalationLevel.TargetType.USER
+            level_3.target_user = users["charlie"]
+            level_3.wait_minutes = 15
+            level_3.save()
+        action = "Created" if created else "Ensured"
+        self.stdout.write(f"  - {action} level 3: {level_3}")
 
         # Link Payment API service to backend critical policy
         payment_service = Service.objects.filter(slug="payment-api").first()

@@ -463,6 +463,27 @@ npm run build
   - ESLint: 0 errors, 0 warnings (`npm run lint`).
   - Production build: Clean bundle emission in 2.7s (`npm run build`).
 
+**Phase 9 — Full-System Integration & Contract Verification (Complete)**
+- **Integration Contract Alignments**:
+  - **Escalation Level Serialization**: Updated `IncidentSerializer` and `IncidentViewSet` to expose `current_escalation_level` (order integer) with `select_related('current_escalation_level')` for $O(1)$ serialization.
+  - **On-Call Assignment Source**: Updated `CurrentOnCallCard.tsx` to case-insensitively match `source?.toUpperCase()` (`OVERRIDE` vs `BASE`), adhering to backend contract.
+  - **Team Membership Role Contract**: Aligned frontend `TeamMembershipRole` union (`ENGINEER`, `LEAD`, `RESPONDER`) with the authoritative backend model enum.
+  - **Escalation Tier Presentation**: Rendered live escalation level in `IncidentDetail.tsx` context grid without client-side derivation.
+  - **ISO Datetime Query Parsing**: Hardened `at` query parameter parsing in `backend/apps/scheduling/views.py` to correctly preserve `+` in URL-decoded timezone offsets.
+- **Celery Test Isolation**:
+  - Configured `settings.CELERY_BROKER_URL = "redis://redis:6379/15"` in `backend/conftest.py`, strictly isolating async test queues and delayed countdown tasks from the live worker running on Redis DB 0.
+- **Full-System Integration Test Suite (`backend/tests/test_full_system_integration.py`)**:
+  - **Golden Full-System Scenario (Section 81)**: End-to-end multi-step verification spanning ingestion, deduplication, on-call assignment, Celery escalation, acknowledgement, resolution, post-resolution alerts, incident reopening with automation generation bumping, schedule overrides, and backend analytics.
+  - **Task Idempotency & Exhaustion**: Verified duplicate task executions safely no-op and final escalation levels record `ESCALATION_EXHAUSTED` once while maintaining incident state.
+- **Demo Seeding Verification**:
+  - Updated `seed_demo.py` with full canonical test stack (Alice, Bob, Charlie, 3-tier escalation policy) and verified idempotent execution.
+- **Test Metrics & System Health**:
+  - Backend: **190 passed / 0 failed** across all test suites (`pytest`).
+  - Frontend: **66 passed / 0 failed** across 18 test files (`vitest`).
+  - Ruff: 0 errors across Phase 9 files (`ruff check`).
+  - ESLint: 0 errors, 0 warnings (`npm run lint`).
+  - TypeScript: 0 errors (`tsc --noEmit`).
+
 ---
 
 ## 11. Development & Testing Commands
@@ -507,5 +528,7 @@ npm run build
 - [x] **Phase 6 — Frontend Foundation**
 - [x] **Phase 7 — Operations Frontend** (Live Dashboard, Incident Workbench, Incident Detail, Actions & Timeline)
 - [x] **Phase 8 — Platform Configuration & Analytics** (Service Registry, Schedule Editor, Escalation Policy Editor, MTTA/MTTR Analytics)
+- [x] **Phase 9 — Full-System Integration & Contract Verification** (Contract Alignments, Test Isolation, End-to-End Acceptance Suites)
+
 
 

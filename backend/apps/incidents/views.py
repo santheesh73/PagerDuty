@@ -22,7 +22,7 @@ class IncidentViewSet(
     """
 
     queryset = (
-        Incident.objects.select_related("service", "assigned_user")
+        Incident.objects.select_related("service", "assigned_user", "current_escalation_level")
         .annotate(alert_count=Count("alerts"))
         .all()
         .order_by("-triggered_at")

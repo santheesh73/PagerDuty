@@ -31,7 +31,7 @@ export interface Team extends TeamSummary {
   updated_at: string;
 }
 
-export type TeamMembershipRole = 'MEMBER' | 'ADMIN' | 'OBSERVER';
+export type TeamMembershipRole = 'ENGINEER' | 'LEAD' | 'RESPONDER';
 
 export interface TeamMembership {
   id: number;
