@@ -6,7 +6,7 @@ A deterministic, production-grade incident management platform providing automat
 
 ## Overview
 
-The Incident Management Platform coordinates emergency response workflows during production incidents. It receives monitoring alerts from upstream systems, groups them deterministically into incidents to prevent alert fatigue, identifies the active on-call responder for the affected service, dispatches notifications, and automatically escalates unacknowledged incidents according to configurable policies. Every action is recorded in an immutable, append-only timeline, powering real-time operational analytics (MTTA / MTTR).
+The Incident Management Platform coordinates emergency response workflows during production incidents. It receives monitoring alerts from upstream systems, groups them deterministically into incidents to prevent alert fatigue, identifies the active on-call responder for the affected service, dispatches notifications, and automatically escalates unacknowledged incidents according to configurable policies. Every action is recorded in an immutable, append-only timeline, powering real-time operational analytics (MTTA / MTTR)
 
 ---
 
