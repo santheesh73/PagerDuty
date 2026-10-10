@@ -25,3 +25,25 @@ def test_request_id_is_replaced_when_malformed(client: Client) -> None:
     response = client.get("/healthz", headers={"X-Request-ID": "<script>"})
     assert response["X-Request-ID"] != "<script>"
     assert len(response["X-Request-ID"]) == 32
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/incidents/",
+        "/api/v1/services/",
+        "/api/v1/escalation-policies/",
+        "/api/v1/schedules/",
+        "/api/v1/notifications/",
+        "/api/v1/oncalls/",
+        "/api/v1/teams/",
+        "/api/v1/users/",
+        "/api/v1/analytics/summary/",
+        "/api/v1/schedules/1/overrides/",
+    ],
+)
+def test_every_api_endpoint_requires_authentication(client: Client, path: str) -> None:
+    response = client.get(path)
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_authenticated"

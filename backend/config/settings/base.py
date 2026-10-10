@@ -141,6 +141,12 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "ENUM_NAME_OVERRIDES": {
+        "IncidentStatusEnum": "apps.incidents.models.Status",
+        "AlertStatusEnum": "apps.alerting.models.Alert.Status",
+        "NotificationStatusEnum": "apps.notifications.models.Notification.Status",
+        "ServiceModeEnum": "apps.catalog.models.Service.Mode",
+    },
 }
 
 # --- Celery ----------------------------------------------------------------

@@ -3,5 +3,3095 @@ info:
   title: Pulse API
   version: 1.0.0
   description: 'Incident orchestration: Events ingest, incidents, escalation, on-call.'
-paths: {}
-components: {}
+paths:
+  /api/v1/analytics/summary/:
+    get:
+      operationId: analytics_summary_retrieve
+      parameters:
+      - in: query
+        name: service
+        schema:
+          type: integer
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO-8601, default 30 days ago
+      - in: query
+        name: team
+        schema:
+          type: integer
+      - in: query
+        name: until
+        schema:
+          type: string
+        description: ISO-8601, default now
+      tags:
+      - analytics
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+          description: ''
+  /api/v1/analytics/timeseries/:
+    get:
+      operationId: analytics_timeseries_list
+      parameters:
+      - in: query
+        name: service
+        schema:
+          type: integer
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO-8601, default 30 days ago
+      - in: query
+        name: team
+        schema:
+          type: integer
+      - in: query
+        name: tz
+        schema:
+          type: string
+        description: IANA zone; default your profile's
+      - in: query
+        name: until
+        schema:
+          type: string
+        description: ISO-8601, default now
+      tags:
+      - analytics
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DayPoint'
+          description: ''
+  /api/v1/auth/csrf/:
+    get:
+      operationId: auth_csrf_retrieve
+      description: Sets the CSRF cookie for anonymous visitors (the login page).
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/v1/auth/login/:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+  /api/v1/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/escalation-policies/:
+    get:
+      operationId: escalation_policies_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: team
+        schema:
+          type: integer
+      tags:
+      - escalation-policies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEscalationPolicyList'
+          description: ''
+    post:
+      operationId: escalation_policies_create
+      tags:
+      - escalation-policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationPolicy'
+          description: ''
+  /api/v1/escalation-policies/{id}/:
+    get:
+      operationId: escalation_policies_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this escalation policy.
+        required: true
+      tags:
+      - escalation-policies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationPolicy'
+          description: ''
+    put:
+      operationId: escalation_policies_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this escalation policy.
+        required: true
+      tags:
+      - escalation-policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EscalationPolicyRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationPolicy'
+          description: ''
+    patch:
+      operationId: escalation_policies_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this escalation policy.
+        required: true
+      tags:
+      - escalation-policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEscalationPolicyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEscalationPolicyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEscalationPolicyRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationPolicy'
+          description: ''
+    delete:
+      operationId: escalation_policies_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this escalation policy.
+        required: true
+      tags:
+      - escalation-policies
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/events/:
+    post:
+      operationId: events_create
+      description: |-
+        Events API v1. Authenticated solely by `routing_key` (a service's integration key).
+
+        No session, no CSRF: monitoring systems post here directly.
+      tags:
+      - events
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+            examples:
+              Trigger:
+                value:
+                  routing_key: <integration key>
+                  event_action: trigger
+                  dedup_key: db-1/disk
+                  payload:
+                    summary: Disk 95% full on db-1
+                    severity: critical
+                    source: prometheus
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EventRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResult'
+          description: ''
+  /api/v1/incidents/:
+    get:
+      operationId: incidents_list
+      parameters:
+      - in: query
+        name: assignee
+        schema:
+          type: string
+        description: A user id, or `me`
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: 'Title text, #number or exact dedup key'
+      - in: query
+        name: service
+        schema:
+          type: integer
+      - in: query
+        name: since
+        schema:
+          type: string
+        description: ISO-8601; triggered at or after
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: 'Comma-separated: triggered,acknowledged,resolved'
+      - in: query
+        name: team
+        schema:
+          type: integer
+      - in: query
+        name: until
+        schema:
+          type: string
+        description: ISO-8601; triggered before
+      - in: query
+        name: urgency
+        schema:
+          type: string
+          enum:
+          - high
+          - low
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIncidentList'
+          description: ''
+  /api/v1/incidents/{id}/:
+    get:
+      operationId: incidents_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/acknowledge/:
+    post:
+      operationId: incidents_acknowledge_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/alerts/:
+    get:
+      operationId: incidents_alerts_list
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAlertList'
+          description: ''
+  /api/v1/incidents/{id}/escalate/:
+    post:
+      operationId: incidents_escalate_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/notes/:
+    post:
+      operationId: incidents_notes_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentEvent'
+          description: ''
+  /api/v1/incidents/{id}/reassign/:
+    post:
+      operationId: incidents_reassign_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReassignRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReassignRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/resolve/:
+    post:
+      operationId: incidents_resolve_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/incidents/{id}/timeline/:
+    get:
+      operationId: incidents_timeline_list
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIncidentEventList'
+          description: ''
+  /api/v1/incidents/{id}/unacknowledge/:
+    post:
+      operationId: incidents_unacknowledge_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentDetail'
+          description: ''
+  /api/v1/me/:
+    get:
+      operationId: me_retrieve
+      description: 'Current user. Also the SPA''s bootstrap call: it always sets the
+        CSRF cookie.'
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+    patch:
+      operationId: me_partial_update
+      description: 'Current user. Also the SPA''s bootstrap call: it always sets the
+        CSRF cookie.'
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+  /api/v1/notifications/:
+    get:
+      operationId: notifications_list
+      description: 'Your in-app inbox. Only in-app rows: email copies are delivery
+        records, not inbox items.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: unread
+        schema:
+          type: boolean
+      tags:
+      - notifications
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api/v1/notifications/{id}/read/:
+    post:
+      operationId: notifications_read_create
+      description: 'Your in-app inbox. Only in-app rows: email copies are delivery
+        records, not inbox items.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification.
+        required: true
+      tags:
+      - notifications
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/notifications/read-all/:
+    post:
+      operationId: notifications_read_all_create
+      description: 'Your in-app inbox. Only in-app rows: email copies are delivery
+        records, not inbox items.'
+      tags:
+      - notifications
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Count'
+          description: ''
+  /api/v1/notifications/unread-count/:
+    get:
+      operationId: notifications_unread_count_retrieve
+      description: 'Your in-app inbox. Only in-app rows: email copies are delivery
+        records, not inbox items.'
+      tags:
+      - notifications
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Count'
+          description: ''
+  /api/v1/oncalls/:
+    get:
+      operationId: oncalls_list
+      description: Who would be paged right now, for every level of every policy you
+        can see.
+      tags:
+      - oncalls
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OnCallPolicy'
+          description: ''
+  /api/v1/schedules/:
+    get:
+      operationId: schedules_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: team
+        schema:
+          type: integer
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedScheduleList'
+          description: ''
+    post:
+      operationId: schedules_create
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+          description: ''
+  /api/v1/schedules/{id}/:
+    get:
+      operationId: schedules_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+          description: ''
+    put:
+      operationId: schedules_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ScheduleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+          description: ''
+    patch:
+      operationId: schedules_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedScheduleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedScheduleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedScheduleRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+          description: ''
+    delete:
+      operationId: schedules_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/schedules/{id}/oncall/:
+    get:
+      operationId: schedules_oncall_retrieve
+      parameters:
+      - in: query
+        name: at
+        schema:
+          type: string
+          format: date-time
+        description: Defaults to now
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnCallNow'
+          description: ''
+  /api/v1/schedules/{id}/shifts/:
+    get:
+      operationId: schedules_shifts_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this schedule.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date-time
+        description: Defaults to now
+      - in: query
+        name: team
+        schema:
+          type: integer
+      - in: query
+        name: until
+        schema:
+          type: string
+          format: date-time
+        description: Defaults to since + 7 days
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShiftList'
+          description: ''
+  /api/v1/schedules/{schedule_pk}/overrides/:
+    get:
+      operationId: schedules_overrides_list
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Override'
+          description: ''
+    post:
+      operationId: schedules_overrides_create
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Override'
+          description: ''
+  /api/v1/schedules/{schedule_pk}/overrides/{id}/:
+    get:
+      operationId: schedules_overrides_retrieve
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Override'
+          description: ''
+    put:
+      operationId: schedules_overrides_update
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OverrideRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Override'
+          description: ''
+    patch:
+      operationId: schedules_overrides_partial_update
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOverrideRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Override'
+          description: ''
+    delete:
+      operationId: schedules_overrides_destroy
+      description: /schedules/{schedule_pk}/overrides/ — members read, team admins
+        write.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: schedule_pk
+        schema:
+          type: integer
+        required: true
+      tags:
+      - schedules
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/services/:
+    get:
+      operationId: services_list
+      parameters:
+      - in: query
+        name: escalation_policy
+        schema:
+          type: integer
+      - in: query
+        name: mode
+        schema:
+          type: string
+          enum:
+          - active
+          - debug
+          - maintenance
+        description: |-
+          * `active` - Active
+          * `maintenance` - Maintenance
+          * `debug` - Debug
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: team
+        schema:
+          type: integer
+      tags:
+      - services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceList'
+          description: ''
+    post:
+      operationId: services_create
+      tags:
+      - services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+  /api/v1/services/{id}/:
+    get:
+      operationId: services_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    put:
+      operationId: services_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    patch:
+      operationId: services_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedServiceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedServiceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedServiceRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    delete:
+      operationId: services_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/services/{id}/mode/:
+    post:
+      operationId: services_mode_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceModeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServiceModeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceModeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+  /api/v1/services/{id}/rotate-key/:
+    post:
+      operationId: services_rotate_key_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+  /api/v1/services/{id}/test-alert/:
+    post:
+      operationId: services_test_alert_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this service.
+        required: true
+      tags:
+      - services
+      security:
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestAlertResult'
+          description: ''
+  /api/v1/teams/:
+    get:
+      operationId: teams_list
+      tags:
+      - teams
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Team'
+          description: ''
+  /api/v1/teams/{id}/:
+    get:
+      operationId: teams_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this team.
+        required: true
+      tags:
+      - teams
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+          description: ''
+  /api/v1/teams/{id}/members/:
+    get:
+      operationId: teams_members_list
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this team.
+        required: true
+      tags:
+      - teams
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamMember'
+          description: ''
+  /api/v1/users/:
+    get:
+      operationId: users_list
+      description: 'People the requester can page or schedule: members of any of their
+        teams.'
+      parameters:
+      - in: query
+        name: team
+        schema:
+          type: integer
+        description: Limit to one team
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSummary'
+          description: ''
+  /api/v1/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: 'People the requester can page or schedule: members of any of their
+        teams.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummary'
+          description: ''
+components:
+  schemas:
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        dedup_key:
+          type: string
+          readOnly: true
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+        payload:
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AlertStatusEnum'
+          readOnly: true
+        received_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - dedup_key
+      - id
+      - payload
+      - received_at
+      - severity
+      - source
+      - status
+      - summary
+    AlertStatusEnum:
+      enum:
+      - triggered
+      - acknowledged
+      - resolved
+      - suppressed
+      type: string
+      description: |-
+        * `triggered` - Triggered
+        * `acknowledged` - Acknowledged
+        * `resolved` - Resolved
+        * `suppressed` - Suppressed
+    ChannelEnum:
+      enum:
+      - in_app
+      - email
+      type: string
+      description: |-
+        * `in_app` - In-app
+        * `email` - Email
+    Count:
+      type: object
+      properties:
+        count:
+          type: integer
+      required:
+      - count
+    DayPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        incidents:
+          type: integer
+        high:
+          type: integer
+        low:
+          type: integer
+        time_to_first_response_seconds:
+          type: number
+          format: double
+          nullable: true
+        mtta_seconds:
+          type: number
+          format: double
+          nullable: true
+        mttr_seconds:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - date
+      - high
+      - incidents
+      - low
+      - mtta_seconds
+      - mttr_seconds
+      - time_to_first_response_seconds
+    EscalationPolicy:
+      type: object
+      description: A policy and its ordered levels. Writes replace `rules` wholesale,
+        atomically.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team:
+          type: integer
+        name:
+          type: string
+          maxLength: 120
+        num_loops:
+          type: integer
+          maximum: 3
+          minimum: 0
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyService'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - rules
+      - services
+      - team
+      - updated_at
+    EscalationPolicyRequest:
+      type: object
+      description: A policy and its ordered levels. Writes replace `rules` wholesale,
+        atomically.
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        num_loops:
+          type: integer
+          maximum: 3
+          minimum: 0
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRequest'
+      required:
+      - name
+      - rules
+      - team
+    EventActionEnum:
+      enum:
+      - trigger
+      - acknowledge
+      - resolve
+      type: string
+      description: |-
+        * `trigger` - trigger
+        * `acknowledge` - acknowledge
+        * `resolve` - resolve
+    EventPayloadRequest:
+      type: object
+      properties:
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        severity:
+          $ref: '#/components/schemas/SeverityEnum'
+        source:
+          type: string
+          minLength: 1
+          maxLength: 255
+        custom_details: {}
+      required:
+      - severity
+      - source
+      - summary
+    EventRequest:
+      type: object
+      properties:
+        routing_key:
+          type: string
+          minLength: 1
+          maxLength: 64
+        event_action:
+          $ref: '#/components/schemas/EventActionEnum'
+        dedup_key:
+          type: string
+          maxLength: 255
+        payload:
+          $ref: '#/components/schemas/EventPayloadRequest'
+      required:
+      - event_action
+      - routing_key
+    EventResult:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/EventResultStatusEnum'
+        dedup_key:
+          type: string
+        incident_id:
+          type: integer
+          nullable: true
+      required:
+      - dedup_key
+      - incident_id
+      - status
+    EventResultStatusEnum:
+      enum:
+      - accepted
+      - ignored
+      type: string
+      description: |-
+        * `accepted` - accepted
+        * `ignored` - ignored
+    Incident:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        number:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/IncidentStatusEnum'
+          readOnly: true
+          default: triggered
+        urgency:
+          allOf:
+          - $ref: '#/components/schemas/UrgencyEnum'
+          readOnly: true
+        service:
+          allOf:
+          - $ref: '#/components/schemas/IncidentService'
+          readOnly: true
+        assignee:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+          nullable: true
+        dedup_key:
+          type: string
+          readOnly: true
+        is_maintenance:
+          type: boolean
+          readOnly: true
+        escalation_level:
+          type: integer
+          readOnly: true
+        escalation_loop:
+          type: integer
+          readOnly: true
+        next_escalation_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        triggered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        first_response_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        alert_count:
+          type: integer
+          readOnly: true
+        allowed_actions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: Actions the requester may take right now, given status and
+            team role.
+      required:
+      - acknowledged_at
+      - alert_count
+      - allowed_actions
+      - assignee
+      - dedup_key
+      - escalation_level
+      - escalation_loop
+      - first_response_at
+      - id
+      - is_maintenance
+      - next_escalation_at
+      - number
+      - resolved_at
+      - service
+      - status
+      - title
+      - triggered_at
+      - urgency
+    IncidentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        number:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/IncidentStatusEnum'
+          readOnly: true
+          default: triggered
+        urgency:
+          allOf:
+          - $ref: '#/components/schemas/UrgencyEnum'
+          readOnly: true
+        service:
+          allOf:
+          - $ref: '#/components/schemas/IncidentService'
+          readOnly: true
+        assignee:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+          nullable: true
+        dedup_key:
+          type: string
+          readOnly: true
+        is_maintenance:
+          type: boolean
+          readOnly: true
+        escalation_level:
+          type: integer
+          readOnly: true
+        escalation_loop:
+          type: integer
+          readOnly: true
+        next_escalation_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        triggered_at:
+          type: string
+          format: date-time
+          readOnly: true
+        first_response_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        alert_count:
+          type: integer
+          readOnly: true
+        allowed_actions:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: Actions the requester may take right now, given status and
+            team role.
+        escalation_snapshot:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - acknowledged_at
+      - alert_count
+      - allowed_actions
+      - assignee
+      - dedup_key
+      - escalation_level
+      - escalation_loop
+      - escalation_snapshot
+      - first_response_at
+      - id
+      - is_maintenance
+      - next_escalation_at
+      - number
+      - resolved_at
+      - service
+      - status
+      - title
+      - triggered_at
+      - urgency
+    IncidentEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/IncidentEventTypeEnum'
+          readOnly: true
+        actor:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+          nullable: true
+        message:
+          type: string
+          readOnly: true
+        data:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actor
+      - created_at
+      - data
+      - id
+      - message
+      - type
+    IncidentEventTypeEnum:
+      enum:
+      - triggered
+      - alert_attached
+      - acknowledged
+      - unacknowledged
+      - resolved
+      - reassigned
+      - escalated
+      - manual_escalated
+      - no_responder
+      - escalation_exhausted
+      - note_added
+      - notified
+      - notification_failed
+      - maintenance_started
+      - maintenance_ended
+      type: string
+      description: |-
+        * `triggered` - Triggered
+        * `alert_attached` - Alert Attached
+        * `acknowledged` - Acknowledged
+        * `unacknowledged` - Unacknowledged
+        * `resolved` - Resolved
+        * `reassigned` - Reassigned
+        * `escalated` - Escalated
+        * `manual_escalated` - Manual Escalated
+        * `no_responder` - No Responder
+        * `escalation_exhausted` - Escalation Exhausted
+        * `note_added` - Note Added
+        * `notified` - Notified
+        * `notification_failed` - Notification Failed
+        * `maintenance_started` - Maintenance Started
+        * `maintenance_ended` - Maintenance Ended
+    IncidentRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        number:
+          type: integer
+        title:
+          type: string
+        status:
+          type: string
+        urgency:
+          type: string
+      required:
+      - id
+      - number
+      - status
+      - title
+      - urgency
+    IncidentService:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        mode:
+          type: string
+        team:
+          type: integer
+      required:
+      - id
+      - mode
+      - name
+      - team
+    IncidentStatusEnum:
+      enum:
+      - triggered
+      - acknowledged
+      - resolved
+      type: string
+      description: |-
+        * `triggered` - Triggered
+        * `acknowledged` - Acknowledged
+        * `resolved` - Resolved
+    Layer:
+      type: object
+      description: A rotation layer. `members` is the rotation order as user ids.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        priority:
+          type: integer
+          readOnly: true
+        rotation_type:
+          $ref: '#/components/schemas/RotationTypeEnum'
+        turn_count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        turn_length_hours:
+          type: integer
+          maximum: 672
+          minimum: 1
+          nullable: true
+          description: 'Custom rotations only: hours per turn.'
+        start:
+          type: string
+          format: date-time
+        handoff_time:
+          type: string
+          format: time
+        members:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        member_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+      required:
+      - handoff_time
+      - id
+      - member_details
+      - members
+      - name
+      - priority
+      - rotation_type
+      - start
+    LayerRequest:
+      type: object
+      description: A rotation layer. `members` is the rotation order as user ids.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        rotation_type:
+          $ref: '#/components/schemas/RotationTypeEnum'
+        turn_count:
+          type: integer
+          maximum: 32767
+          minimum: 1
+        turn_length_hours:
+          type: integer
+          maximum: 672
+          minimum: 1
+          nullable: true
+          description: 'Custom rotations only: hours per turn.'
+        start:
+          type: string
+          format: date-time
+        handoff_time:
+          type: string
+          format: time
+        members:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+      required:
+      - handoff_time
+      - members
+      - name
+      - rotation_type
+      - start
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+      required:
+      - email
+      - password
+    Me:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        timezone:
+          type: string
+          maxLength: 64
+        is_staff:
+          type: boolean
+          readOnly: true
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Membership'
+          readOnly: true
+      required:
+      - email
+      - id
+      - is_staff
+      - memberships
+      - name
+    Membership:
+      type: object
+      properties:
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+      required:
+      - role
+      - team
+    NoisyService:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        alerts:
+          type: integer
+        incidents:
+          type: integer
+      required:
+      - alerts
+      - id
+      - incidents
+      - name
+    NoteRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+          description: ≤ 5000 chars
+      required:
+      - text
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        incident:
+          allOf:
+          - $ref: '#/components/schemas/IncidentRef'
+          readOnly: true
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/ChannelEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NotificationStatusEnum'
+          readOnly: true
+        attempts:
+          type: integer
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        read_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - attempts
+      - channel
+      - created_at
+      - id
+      - incident
+      - read_at
+      - sent_at
+      - status
+    NotificationStatusEnum:
+      enum:
+      - pending
+      - sent
+      - failed
+      - dry_run
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `sent` - Sent
+        * `failed` - Failed
+        * `dry_run` - Dry run
+    OnCallEntry:
+      type: object
+      properties:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        schedule:
+          allOf:
+          - $ref: '#/components/schemas/ScheduleRef'
+          nullable: true
+      required:
+      - schedule
+      - user
+    OnCallLevel:
+      type: object
+      properties:
+        level:
+          type: integer
+        delay_minutes:
+          type: integer
+        oncall:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnCallEntry'
+      required:
+      - delay_minutes
+      - level
+      - oncall
+    OnCallNow:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        user:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        source:
+          type: string
+          nullable: true
+      required:
+      - at
+      - source
+      - user
+    OnCallPolicy:
+      type: object
+      properties:
+        policy:
+          $ref: '#/components/schemas/PolicyRef'
+        levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnCallLevel'
+      required:
+      - levels
+      - policy
+    Override:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: integer
+        user_detail:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - end
+      - id
+      - start
+      - user
+      - user_detail
+    OverrideRequest:
+      type: object
+      properties:
+        user:
+          type: integer
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+      required:
+      - end
+      - start
+      - user
+    PaginatedAlertList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+    PaginatedEscalationPolicyList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EscalationPolicy'
+    PaginatedIncidentEventList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentEvent'
+    PaginatedIncidentList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+    PaginatedNotificationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+    PaginatedScheduleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Schedule'
+    PaginatedServiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    PaginatedShiftList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shift'
+    PatchedEscalationPolicyRequest:
+      type: object
+      description: A policy and its ordered levels. Writes replace `rules` wholesale,
+        atomically.
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        num_loops:
+          type: integer
+          maximum: 3
+          minimum: 0
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleRequest'
+    PatchedMeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+    PatchedOverrideRequest:
+      type: object
+      properties:
+        user:
+          type: integer
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+    PatchedScheduleRequest:
+      type: object
+      description: 'Writes replace `layers` wholesale. Layer order is priority: the
+        first layer wins.'
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayerRequest'
+    PatchedServiceRequest:
+      type: object
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+        escalation_policy:
+          type: integer
+    PolicyRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        team:
+          type: integer
+      required:
+      - id
+      - name
+      - team
+    PolicyService:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+    ReassignRequest:
+      type: object
+      properties:
+        assignee:
+          type: integer
+      required:
+      - assignee
+    RoleEnum:
+      enum:
+      - admin
+      - responder
+      - viewer
+      type: string
+      description: |-
+        * `admin` - Team admin
+        * `responder` - Responder
+        * `viewer` - Viewer
+    RotationTypeEnum:
+      enum:
+      - daily
+      - weekly
+      - custom
+      type: string
+      description: |-
+        * `daily` - Daily
+        * `weekly` - Weekly
+        * `custom` - Custom
+    Rule:
+      type: object
+      properties:
+        level:
+          type: integer
+          readOnly: true
+        delay_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 1
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+      required:
+      - delay_minutes
+      - level
+      - targets
+    RuleRequest:
+      type: object
+      properties:
+        delay_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 1
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetRequest'
+      required:
+      - delay_minutes
+      - targets
+    Schedule:
+      type: object
+      description: 'Writes replace `layers` wholesale. Layer order is priority: the
+        first layer wins.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team:
+          type: integer
+        name:
+          type: string
+          maxLength: 120
+        timezone:
+          type: string
+          maxLength: 64
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Layer'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - layers
+      - name
+      - team
+      - updated_at
+    ScheduleRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    ScheduleRequest:
+      type: object
+      description: 'Writes replace `layers` wholesale. Layer order is priority: the
+        first layer wins.'
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayerRequest'
+      required:
+      - layers
+      - name
+      - team
+    Service:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        team:
+          type: integer
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        escalation_policy:
+          type: integer
+        escalation_policy_name:
+          type: string
+          readOnly: true
+        integration_key:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Only team admins see the key; everyone else gets null.
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/ServiceModeEnum'
+          readOnly: true
+        mode_until:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        open_incidents:
+          type: object
+          additionalProperties:
+            type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - escalation_policy
+      - escalation_policy_name
+      - id
+      - integration_key
+      - mode
+      - mode_until
+      - name
+      - open_incidents
+      - team
+      - updated_at
+    ServiceModeEnum:
+      enum:
+      - active
+      - maintenance
+      - debug
+      type: string
+      description: |-
+        * `active` - Active
+        * `maintenance` - Maintenance
+        * `debug` - Debug
+    ServiceModeRequest:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/ServiceModeEnum'
+        until:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - mode
+    ServiceRequest:
+      type: object
+      properties:
+        team:
+          type: integer
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+        escalation_policy:
+          type: integer
+      required:
+      - escalation_policy
+      - name
+      - team
+    SeverityEnum:
+      enum:
+      - critical
+      - error
+      - warning
+      - info
+      type: string
+      description: |-
+        * `critical` - Critical
+        * `error` - Error
+        * `warning` - Warning
+        * `info` - Info
+    Shift:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserSummary'
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        source:
+          type: string
+      required:
+      - end
+      - source
+      - start
+      - user
+    Summary:
+      type: object
+      properties:
+        since:
+          type: string
+          format: date-time
+        until:
+          type: string
+          format: date-time
+        incidents:
+          type: integer
+        by_urgency:
+          $ref: '#/components/schemas/UrgencySplit'
+        time_to_first_response_seconds:
+          type: number
+          format: double
+          nullable: true
+        mtta_seconds:
+          type: number
+          format: double
+          nullable: true
+        mttr_seconds:
+          type: number
+          format: double
+          nullable: true
+        escalation_rate:
+          type: number
+          format: double
+          nullable: true
+        noisy_services:
+          type: array
+          items:
+            $ref: '#/components/schemas/NoisyService'
+      required:
+      - by_urgency
+      - escalation_rate
+      - incidents
+      - mtta_seconds
+      - mttr_seconds
+      - noisy_services
+      - since
+      - time_to_first_response_seconds
+      - until
+    Target:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/TargetTypeEnum'
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - type
+    TargetRequest:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/TargetTypeEnum'
+        id:
+          type: integer
+          minimum: 1
+      required:
+      - id
+      - type
+    TargetTypeEnum:
+      enum:
+      - user
+      - schedule
+      type: string
+      description: |-
+        * `user` - User
+        * `schedule` - Schedule
+    Team:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - id
+      - name
+      - slug
+    TeamMember:
+      type: object
+      properties:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/UserSummary'
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+      required:
+      - role
+      - user
+    TestAlertResult:
+      type: object
+      properties:
+        status:
+          type: string
+        dedup_key:
+          type: string
+        incident_id:
+          type: integer
+          nullable: true
+        created:
+          type: boolean
+      required:
+      - created
+      - dedup_key
+      - incident_id
+      - status
+    UrgencyEnum:
+      enum:
+      - high
+      - low
+      type: string
+      description: |-
+        * `high` - High
+        * `low` - Low
+    UrgencySplit:
+      type: object
+      properties:
+        high:
+          type: integer
+        low:
+          type: integer
+      required:
+      - high
+      - low
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        timezone:
+          type: string
+          readOnly: true
+      required:
+      - email
+      - id
+      - name
+      - timezone
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

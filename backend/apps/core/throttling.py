@@ -1,0 +1,42 @@
+"""Throttles that fail open.
+
+Throttle counters live in Redis. Redis is disposable by design, so if it's unreachable we
+log and let the request through: dropping an alert because the rate limiter is down would
+be far worse than briefly not rate limiting.
+"""
+
+import logging
+from typing import Any
+
+from rest_framework.request import Request
+from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
+from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
+
+
+class FailOpenMixin:
+    def allow_request(self, request: Request, view: APIView) -> bool:
+        try:
+            return super().allow_request(request, view)  # type: ignore[misc]
+        except Exception:
+            logger.warning("throttle backend unavailable; allowing request", exc_info=True)
+            return True
+
+
+class LoginThrottle(FailOpenMixin, AnonRateThrottle):
+    scope = "login"
+
+
+class RoutingKeyThrottle(FailOpenMixin, SimpleRateThrottle):
+    """Per integration key, so one noisy monitor can't starve every other service."""
+
+    scope = "events"
+
+    def get_cache_key(self, request: Request, view: APIView) -> str | None:
+        data: Any = request.data if isinstance(request.data, dict) else {}
+        key = data.get("routing_key")
+        if not isinstance(key, str) or not key:
+            return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+        # Hash-free is fine: the cache is server-side, but never log the raw key.
+        return self.cache_format % {"scope": self.scope, "ident": f"rk:{key[:64]}"}

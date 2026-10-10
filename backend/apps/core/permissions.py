@@ -57,6 +57,10 @@ def has_role(user: Any, team_id: int | None, minimum: str) -> bool:
     return role is not None and _RANK[Role(role)] >= _RANK[Role(minimum)]
 
 
+def member_team_ids(user: Any) -> set[int]:
+    return set(Membership.objects.filter(user=user).values_list("team_id", flat=True))
+
+
 def admin_team_ids(user: Any) -> set[int]:
     if user.is_staff:
         from apps.accounts.models import Team
@@ -67,7 +71,15 @@ def admin_team_ids(user: Any) -> set[int]:
     )
 
 
-class IsTeamMember(BasePermission):
+class _Authenticated(BasePermission):
+    """Setting `permission_classes` replaces DRF's default IsAuthenticated, so every class
+    here re-asserts it. Without this, list endpoints would be open to anonymous users."""
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+
+class IsTeamMember(_Authenticated):
     """Read for any member of the object's team; writes need admin (config objects)."""
 
     def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
@@ -77,7 +89,7 @@ class IsTeamMember(BasePermission):
         return has_role(request.user, team_id, Role.ADMIN)
 
 
-class CanRespond(BasePermission):
+class CanRespond(_Authenticated):
     """Read for members; incident actions for responders and admins."""
 
     def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:

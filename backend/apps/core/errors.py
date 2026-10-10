@@ -7,6 +7,7 @@ how they map to HTTP, so actions stay free of transport concerns.
 from typing import Any
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.db.models import ProtectedError, RestrictedError
 from django.http import Http404
 from rest_framework import exceptions, status
 from rest_framework.response import Response
@@ -48,6 +49,13 @@ def _envelope(code: str, message: str, details: Any, http_status: int) -> Respon
 def exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     if isinstance(exc, DomainError):
         return _envelope(exc.code, exc.message, exc.details, exc.http_status)
+    if isinstance(exc, (ProtectedError, RestrictedError)):
+        return _envelope(
+            "in_use",
+            "This is still referenced elsewhere (e.g. a service uses this policy).",
+            {},
+            status.HTTP_409_CONFLICT,
+        )
     if isinstance(exc, Http404):
         exc = exceptions.NotFound()
     elif isinstance(exc, DjangoPermissionDenied):
