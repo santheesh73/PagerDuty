@@ -35,3 +35,28 @@ def test_every_remaining_factory_builds() -> None:
     assert IncidentEventFactory().incident.number >= 1
     assert NotificationFactory().pk
     assert ScheduleOverrideFactory().end > ScheduleOverrideFactory().start
+
+
+def test_seed_demo_is_idempotent_and_resettable() -> None:
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    from apps.accounts.models import Team, User
+    from apps.incidents.models import Incident
+
+    call_command("seed_demo", stdout=StringIO())
+    first = Incident.objects.count()
+    out = StringIO()
+    call_command("seed_demo", stdout=out)
+    assert "already present" in out.getvalue()
+    assert Incident.objects.count() == first
+
+    call_command("seed_demo", "--reset", stdout=StringIO())
+    assert Team.objects.count() == 3
+    assert User.objects.filter(email="responder@demo.local").exists()
+    assert Incident.objects.exclude(status="resolved").count() == 4
+
+    key_out = StringIO()
+    call_command("routing_key", "checkout-api", stdout=key_out)
+    assert len(key_out.getvalue().strip()) == 64
