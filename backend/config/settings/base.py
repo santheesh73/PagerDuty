@@ -34,7 +34,17 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_spectacular",
     "apps.core",
+    "apps.accounts",
+    "apps.catalog",
+    "apps.alerting",
+    "apps.incidents",
+    "apps.escalations",
+    "apps.schedules",
+    "apps.notifications",
+    "apps.analytics",
 ]
+
+AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "apps.core.middleware.RequestIDMiddleware",
