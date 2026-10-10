@@ -1,1 +1,0 @@
-"""Analytics app tests."""
