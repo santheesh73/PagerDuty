@@ -20,7 +20,8 @@ endif
 SERVICE ?= checkout-api
 ROUTING_KEY ?=
 
-.PHONY: help up down logs ps seed reseed send-alert test test-backend test-frontend \
+
+.PHONY: help up down logs ps seed reseed send-alert chaos-redis badge test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell
 
 help: ## Show this help
@@ -57,8 +58,11 @@ send-alert: ## Fire a live trigger at a seeded service (SERVICE=checkout-api)
 	  -d "{\"routing_key\":\"$$key\",\"event_action\":\"trigger\",\"dedup_key\":\"demo-$$(date +%s)\",\"payload\":{\"summary\":\"CPU above 95% on $(SERVICE)\",\"severity\":\"critical\",\"source\":\"make send-alert\"}}"; \
 	echo; echo "  Open http://localhost:5173/incidents to watch it page and escalate."
 
-test-backend: ## Backend tests with coverage
-	$(BACKEND) pytest --cov --cov-report=term-missing:skip-covered
+chaos-redis: ## Prove a Redis wipe can't lose a page (needs `make up`)
+	COMPOSE="$(COMPOSE)" ./scripts/chaos_redis.sh
+
+test-backend: ## Backend tests with coverage (fails under 85%)
+	$(BACKEND) pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=85
 
 test-frontend: ## Frontend tests
 	$(FRONTEND) npm test
@@ -82,6 +86,9 @@ format: ## Auto-format everything
 
 migrations-check: ## Fail if models and migrations have drifted
 	$(BACKEND) python manage.py makemigrations --check --dry-run
+
+badge: ## Refresh docs/img/coverage.svg from the last backend test run (LOCAL)
+	cd backend && uv run pytest -q --cov >/dev/null && cd .. && python3 scripts/coverage_badge.py
 
 schema: ## Regenerate OpenAPI schema and the frontend's TS types
 	$(BACKEND) python manage.py spectacular --file openapi.yaml --validate

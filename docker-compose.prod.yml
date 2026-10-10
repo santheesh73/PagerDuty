@@ -1,0 +1,79 @@
+# Production-like stack: the prod images (gunicorn + collectstatic, nginx serving the built
+# SPA), prod settings, no source mounts. Useful as a smoke test and as a reference for
+# deploying to any Docker host.
+#
+#   SECRET_KEY=$(openssl rand -hex 32) docker compose -f docker-compose.prod.yml up --build -d
+#   → http://localhost:8080
+#
+# For real deployments put TLS in front and set SECURE_COOKIES / SECURE_SSL_REDIRECT to 1.
+
+x-api-env: &api-env
+  DJANGO_SETTINGS_MODULE: config.settings.prod
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY, e.g. SECRET_KEY=$(openssl rand -hex 32)}
+  DATABASE_URL: postgres://pulse:pulse@db:5432/pulse
+  REDIS_URL: redis://redis:6379/0
+  ALLOWED_HOSTS: localhost,127.0.0.1,api
+  CSRF_TRUSTED_ORIGINS: http://localhost:8080
+  FRONTEND_URL: http://localhost:8080
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-0}
+  SECURE_COOKIES: ${SECURE_COOKIES:-0}
+  SEED_DEMO: ${SEED_DEMO:-1}
+
+x-api: &api
+  build:
+    context: ./backend
+    target: prod
+  environment: *api-env
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment: { POSTGRES_USER: pulse, POSTGRES_PASSWORD: pulse, POSTGRES_DB: pulse }
+    volumes: [pgdata-prod:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse"], interval: 3s, retries: 20 }
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 3s, retries: 20 }
+    restart: unless-stopped
+
+  api:
+    <<: *api
+    command: ["api"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      retries: 60
+      start_period: 15s
+
+  worker:
+    <<: *api
+    command: ["worker"]
+    depends_on: { api: { condition: service_healthy } }
+
+  beat:
+    <<: *api
+    command: ["beat"]
+    depends_on: { api: { condition: service_healthy } }
+
+  web:
+    build:
+      context: ./frontend
+      target: prod
+      args:
+        VITE_SHOW_DEMO_CREDENTIALS: ${SHOW_DEMO_CREDENTIALS:-true}
+    environment:
+      PORT: "80"
+      API_UPSTREAM: http://api:8000
+    ports: ["8080:80"]
+    depends_on: { api: { condition: service_healthy } }
+    restart: unless-stopped
+
+volumes:
+  pgdata-prod:

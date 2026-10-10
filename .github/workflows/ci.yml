@@ -55,7 +55,7 @@ jobs:
           uv run python manage.py spectacular --file /tmp/openapi.yaml --validate
           diff -u openapi.yaml /tmp/openapi.yaml
       - name: Tests
-        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-report=xml
+        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=85
       - name: Coverage summary
         if: always()
         run: |
