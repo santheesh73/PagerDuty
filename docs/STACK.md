@@ -5,6 +5,8 @@ Lockfiles: `backend/uv.lock`, `frontend/package-lock.json`.
 
 ## Runtime and infrastructure
 
+Production images: `python:3.13-slim` + uv 0.11.32 (API, worker, beat, cron) and `nginx:1.29-alpine` serving the built SPA.
+
 | Component | Version | Why |
 |---|---|---|
 | Python | 3.13 | Newest interpreter that Celery 5.6 officially supports. |
@@ -58,6 +60,7 @@ Lockfiles: `backend/uv.lock`, `frontend/package-lock.json`.
 | lucide-react | 1.55.0 | Icon set. |
 | sonner | 2.0.8 | Toasts. |
 | clsx | 2.1.1 | Conditional class names. |
+| tailwind-merge | 3.7.0 | Lets a caller's `w-36` override a component's default `w-full` predictably. |
 | openapi-typescript | 7.13.0 | Generates `src/api/schema.d.ts` from the backend's OpenAPI schema. |
 | vitest / @vitest/coverage-v8 | 5.0.3 | Test runner sharing Vite's config. |
 | @testing-library/react | 16.3.3 | Component tests through the user's eyes. |
