@@ -1,0 +1,7 @@
+openapi: 3.0.3
+info:
+  title: Pulse API
+  version: 1.0.0
+  description: 'Incident orchestration: Events ingest, incidents, escalation, on-call.'
+paths: {}
+components: {}

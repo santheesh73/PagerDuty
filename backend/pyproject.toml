@@ -1,0 +1,76 @@
+[project]
+name = "pulse-backend"
+version = "0.1.0"
+description = "Pulse — incident orchestration API, Events ingest and escalation workers"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "django==6.0.9",
+    "djangorestframework==3.18.3",
+    "drf-spectacular==0.30.0",
+    "django-filter==26.2",
+    "django-cors-headers==4.9.0",
+    "celery[redis]==5.6.3",
+    "psycopg[binary]==3.3.6",
+    "dj-database-url==3.1.2",
+    "gunicorn==26.2.0",
+    "whitenoise==6.12.0",
+    "python-json-logger==4.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-django==4.14.0",
+    "pytest-cov==7.1.0",
+    "factory-boy==3.3.3",
+    "time-machine==3.5.1",
+    "ruff==0.17.0",
+    "mypy==2.3.1",
+    "django-stubs[compatible-mypy]==6.0.9",
+    "djangorestframework-stubs==3.16.9",
+    "celery-types==0.26.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "SIM", "RUF", "PT", "DTZ", "S"]
+ignore = [
+    "RUF012",  # mutable class attrs are idiomatic in Django Meta/DRF classes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "DTZ001"]
+"config/settings/*.py" = ["S105"]
+"**/management/commands/*.py" = ["S311"]  # demo data uses non-crypto randomness on purpose
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["migrations/", "tests/"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "error::RuntimeWarning",
+    "ignore:No directory at:UserWarning",  # whitenoise: STATIC_ROOT is only built in images
+]
+
+[tool.coverage.run]
+branch = true
+source = ["apps"]
+omit = ["*/migrations/*", "*/tests/*", "*/management/*"]
