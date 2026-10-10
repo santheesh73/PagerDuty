@@ -1,3 +1,4 @@
+import math
 from typing import Any
 
 from django.utils import timezone
@@ -5,6 +6,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Team
+from apps.core import limits
 from apps.core.permissions import Role, has_role
 from apps.escalations.models import EscalationPolicy
 
@@ -66,6 +68,13 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 
 class ServiceModeSerializer(serializers.Serializer):
+    """Maintenance and debug suppress paging, so both need a bounded window.
+
+    Without one, a service quietly stops paging for good and nobody finds out until an
+    outage goes unanswered. `expire_service_modes` only reclaims services that have a
+    `mode_until`, so an open-ended window would never be swept back to active.
+    """
+
     mode = serializers.ChoiceField(choices=Service.Mode.choices)
     until = serializers.DateTimeField(required=False, allow_null=True)
 
@@ -73,6 +82,18 @@ class ServiceModeSerializer(serializers.Serializer):
         if value is not None and value <= timezone.now():
             raise serializers.ValidationError("Must be in the future.")
         return value
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs["mode"] == Service.Mode.ACTIVE:
+            return attrs
+        until = attrs.get("until")
+        if until is None:
+            raise serializers.ValidationError(
+                {"until": f"Required for {attrs['mode']} mode, which suppresses paging."}
+            )
+        hours = (until - timezone.now()).total_seconds() / 3600
+        limits.enforce("mode_window_hours", math.ceil(hours))
+        return attrs
 
 
 class TestAlertResultSerializer(serializers.Serializer):

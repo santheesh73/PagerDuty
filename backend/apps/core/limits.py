@@ -13,6 +13,8 @@ MAX_TARGETS_PER_LEVEL: Final = 5
 MAX_LAYERS_PER_SCHEDULE: Final = 5
 MAX_MEMBERS_PER_LAYER: Final = 50
 MAX_NOTE_LENGTH: Final = 5_000
+# A service in maintenance or debug pages nobody, so the window is always bounded.
+MAX_MODE_WINDOW_HOURS: Final = 24
 
 ALL_LIMITS: Final = {
     "event_payload_bytes": MAX_EVENT_PAYLOAD_BYTES,
@@ -21,6 +23,7 @@ ALL_LIMITS: Final = {
     "layers_per_schedule": MAX_LAYERS_PER_SCHEDULE,
     "members_per_layer": MAX_MEMBERS_PER_LAYER,
     "note_length": MAX_NOTE_LENGTH,
+    "mode_window_hours": MAX_MODE_WINDOW_HOURS,
 }
 
 
