@@ -141,6 +141,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.core.schema.require_response_fields",
+    ],
     "ENUM_NAME_OVERRIDES": {
         "IncidentStatusEnum": "apps.incidents.models.Status",
         "AlertStatusEnum": "apps.alerting.models.Alert.Status",

@@ -70,7 +70,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         ],
         responses=ShiftSerializer(many=True),
     )
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"], pagination_class=None)
     def shifts(self, request: Request, pk: str | None = None) -> Response:
         schedule = self.get_object()
         since = _parse_instant(request, "since", timezone.now())

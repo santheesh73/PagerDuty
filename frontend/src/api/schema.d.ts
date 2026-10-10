@@ -715,7 +715,7 @@ export interface components {
       readonly id: number;
       team: number;
       name: string;
-      num_loops?: number;
+      num_loops: number;
       rules: components["schemas"]["Rule"][];
       readonly services: components["schemas"]["PolicyService"][];
       /** Format: date-time */
@@ -886,9 +886,9 @@ export interface components {
       name: string;
       readonly priority: number;
       rotation_type: components["schemas"]["RotationTypeEnum"];
-      turn_count?: number;
+      turn_count: number;
       /** @description Custom rotations only: hours per turn. */
-      turn_length_hours?: number | null;
+      turn_length_hours: number | null;
       /** Format: date-time */
       start: string;
       /** Format: time */
@@ -919,7 +919,7 @@ export interface components {
       /** Format: email */
       readonly email: string;
       name: string;
-      timezone?: string;
+      timezone: string;
       readonly is_staff: boolean;
       readonly memberships: components["schemas"]["Membership"][];
     };
@@ -977,6 +977,10 @@ export interface components {
       policy: components["schemas"]["PolicyRef"];
       levels: components["schemas"]["OnCallLevel"][];
     };
+    OpenCounts: {
+      high: number;
+      low: number;
+    };
     Override: {
       readonly id: number;
       user: number;
@@ -1000,12 +1004,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cD00ODY%3D"
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["Alert"][];
     };
     PaginatedEscalationPolicyList: {
@@ -1015,12 +1019,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=2
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["EscalationPolicy"][];
     };
     PaginatedIncidentEventList: {
@@ -1028,12 +1032,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cD00ODY%3D"
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["IncidentEvent"][];
     };
     PaginatedIncidentList: {
@@ -1041,12 +1045,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cD00ODY%3D"
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["Incident"][];
     };
     PaginatedNotificationList: {
@@ -1056,12 +1060,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=2
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["Notification"][];
     };
     PaginatedScheduleList: {
@@ -1071,12 +1075,12 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=2
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["Schedule"][];
     };
     PaginatedServiceList: {
@@ -1086,28 +1090,13 @@ export interface components {
        * Format: uri
        * @example http://api.example.org/accounts/?page=4
        */
-      next?: string | null;
+      next: string | null;
       /**
        * Format: uri
        * @example http://api.example.org/accounts/?page=2
        */
-      previous?: string | null;
+      previous: string | null;
       results: components["schemas"]["Service"][];
-    };
-    PaginatedShiftList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components["schemas"]["Shift"][];
     };
     /** @description A policy and its ordered levels. Writes replace `rules` wholesale, atomically. */
     PatchedEscalationPolicyRequest: {
@@ -1180,7 +1169,7 @@ export interface components {
       readonly id: number;
       team: number;
       name: string;
-      timezone?: string;
+      timezone: string;
       layers: components["schemas"]["Layer"][];
       /** Format: date-time */
       readonly created_at: string;
@@ -1202,7 +1191,7 @@ export interface components {
       readonly id: number;
       team: number;
       name: string;
-      description?: string;
+      description: string;
       escalation_policy: number;
       readonly escalation_policy_name: string;
       /** @description Only team admins see the key; everyone else gets null. */
@@ -1210,9 +1199,7 @@ export interface components {
       readonly mode: components["schemas"]["ServiceModeEnum"];
       /** Format: date-time */
       readonly mode_until: string | null;
-      readonly open_incidents: {
-        [key: string]: number;
-      };
+      readonly open_incidents: components["schemas"]["OpenCounts"];
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -2196,10 +2183,6 @@ export interface operations {
   schedules_shifts_list: {
     parameters: {
       query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
         /** @description Defaults to now */
         since?: string;
         team?: number;
@@ -2220,7 +2203,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["PaginatedShiftList"];
+          "application/json": components["schemas"]["Shift"][];
         };
       };
     };

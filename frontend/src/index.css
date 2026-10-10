@@ -1,1 +1,164 @@
 @import "tailwindcss";
+
+/* Theme is resolved to data-theme on <html> (system preference unless the user picks one). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e8ebf0;
+  --border: #e2e5ea;
+  --border-strong: #cdd2da;
+  --text: #121826;
+  --muted: #5b6474;
+  --subtle: #8a93a3;
+  --accent: #4b4fe0;
+  --accent-hover: #3d40c9;
+  --accent-soft: #ecedfd;
+  --accent-fg: #ffffff;
+  --critical: #d92d3a;
+  --critical-soft: #fdecee;
+  --critical-fg: #a51d29;
+  --warning: #c27309;
+  --warning-soft: #fdf3e2;
+  --warning-fg: #8f5207;
+  --good: #1d8a4e;
+  --good-soft: #e6f5ec;
+  --good-fg: #146639;
+  --info: #2f6fdc;
+  --info-soft: #e8f0fd;
+  --info-fg: #1f53ab;
+  --neutral-soft: #eef0f3;
+  --ring: #4b4fe0;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-lg: 0 12px 32px rgb(16 24 40 / 0.14), 0 2px 6px rgb(16 24 40 / 0.08);
+  /* Chart series: validated categorical slots 1–2 (CVD ΔE 24.7 on this surface). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-seq: #86b6ef;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0f15;
+  --surface: #131721;
+  --surface-2: #191e2a;
+  --surface-3: #222836;
+  --border: #252b39;
+  --border-strong: #343c4e;
+  --text: #e7eaf0;
+  --muted: #9aa3b5;
+  --subtle: #6c7589;
+  --accent: #8487ff;
+  --accent-hover: #9c9eff;
+  --accent-soft: #23264a;
+  --accent-fg: #0c0f15;
+  --critical: #f2545f;
+  --critical-soft: #3a1a20;
+  --critical-fg: #ff9aa2;
+  --warning: #f0a33a;
+  --warning-soft: #3a2a12;
+  --warning-fg: #ffcf8a;
+  --good: #3fbf7a;
+  --good-soft: #13301f;
+  --good-fg: #8fe0b2;
+  --info: #5b93ff;
+  --info-soft: #172743;
+  --info-fg: #a8c6ff;
+  --neutral-soft: #222836;
+  --ring: #8487ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-seq: #256abf;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-fg: var(--critical-fg);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-fg: var(--warning-fg);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-good-fg: var(--good-fg);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-fg: var(--info-fg);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-ring: var(--ring);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-seq: var(--series-seq);
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-lg);
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-bg text-text font-sans text-sm;
+    font-feature-settings: "cv11", "ss01";
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 0%,
+      var(--surface-3) 50%,
+      var(--surface-2) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}

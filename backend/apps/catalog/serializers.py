@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.accounts.models import Team
@@ -48,6 +49,7 @@ class ServiceSerializer(serializers.ModelSerializer):
             return obj.integration_key
         return None
 
+    @extend_schema_field(OpenCountsSerializer)
     def get_open_incidents(self, obj: Service) -> dict[str, int]:
         return {"high": getattr(obj, "open_high", 0), "low": getattr(obj, "open_low", 0)}
 

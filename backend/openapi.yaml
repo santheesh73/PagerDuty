@@ -967,18 +967,6 @@ paths:
           type: integer
         description: A unique integer value identifying this schedule.
         required: true
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
       - in: query
         name: since
         schema:
@@ -1004,7 +992,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedShiftList'
+                type: array
+                items:
+                  $ref: '#/components/schemas/Shift'
           description: ''
   /api/v1/schedules/{schedule_pk}/overrides/:
     get:
@@ -1678,6 +1668,7 @@ components:
       - created_at
       - id
       - name
+      - num_loops
       - rules
       - services
       - team
@@ -2127,6 +2118,8 @@ components:
       - priority
       - rotation_type
       - start
+      - turn_count
+      - turn_length_hours
     LayerRequest:
       type: object
       description: A rotation layer. `members` is the rotation order as user ids.
@@ -2207,6 +2200,7 @@ components:
       - is_staff
       - memberships
       - name
+      - timezone
     Membership:
       type: object
       properties:
@@ -2360,6 +2354,16 @@ components:
       required:
       - levels
       - policy
+    OpenCounts:
+      type: object
+      properties:
+        high:
+          type: integer
+        low:
+          type: integer
+      required:
+      - high
+      - low
     Override:
       type: object
       properties:
@@ -2407,6 +2411,8 @@ components:
     PaginatedAlertList:
       type: object
       required:
+      - next
+      - previous
       - results
       properties:
         next:
@@ -2427,6 +2433,8 @@ components:
       type: object
       required:
       - count
+      - next
+      - previous
       - results
       properties:
         count:
@@ -2449,6 +2457,8 @@ components:
     PaginatedIncidentEventList:
       type: object
       required:
+      - next
+      - previous
       - results
       properties:
         next:
@@ -2468,6 +2478,8 @@ components:
     PaginatedIncidentList:
       type: object
       required:
+      - next
+      - previous
       - results
       properties:
         next:
@@ -2488,6 +2500,8 @@ components:
       type: object
       required:
       - count
+      - next
+      - previous
       - results
       properties:
         count:
@@ -2511,6 +2525,8 @@ components:
       type: object
       required:
       - count
+      - next
+      - previous
       - results
       properties:
         count:
@@ -2534,6 +2550,8 @@ components:
       type: object
       required:
       - count
+      - next
+      - previous
       - results
       properties:
         count:
@@ -2553,29 +2571,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Service'
-    PaginatedShiftList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Shift'
     PatchedEscalationPolicyRequest:
       type: object
       description: A policy and its ordered levels. Writes replace `rules` wholesale,
@@ -2767,6 +2762,7 @@ components:
       - layers
       - name
       - team
+      - timezone
       - updated_at
     ScheduleRef:
       type: object
@@ -2834,9 +2830,8 @@ components:
           readOnly: true
           nullable: true
         open_incidents:
-          type: object
-          additionalProperties:
-            type: integer
+          allOf:
+          - $ref: '#/components/schemas/OpenCounts'
           readOnly: true
         created_at:
           type: string
@@ -2848,6 +2843,7 @@ components:
           readOnly: true
       required:
       - created_at
+      - description
       - escalation_policy
       - escalation_policy_name
       - id
