@@ -24,7 +24,7 @@ def on_commit(task: Task, *args: Any, eta: datetime | None = None, **kwargs: Any
             task.apply_async(args=args, kwargs=kwargs, **options)
         except Exception:
             logger.exception(
-                "enqueue failed; sweeper will recover", extra={"task": task.name, "args": args}
+                "enqueue failed; sweeper will recover", extra={"task": task.name, "task_args": args}
             )
 
     transaction.on_commit(_send)
