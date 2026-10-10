@@ -21,6 +21,13 @@ describe("formatRelative", () => {
     expect(formatRelative("2026-01-01T11:59:50Z", now)).toBe("just now");
     expect(formatRelative("2026-01-01T11:00:00Z", now)).toBe("1 hr. ago");
   });
+
+  it("treats events slightly ahead of a stale clock as just now", () => {
+    const now = Date.parse("2026-01-01T12:00:00Z");
+    expect(formatRelative("2026-01-01T12:00:20Z", now)).toBe("just now");
+    expect(formatRelative("2026-01-01T12:01:30Z", now)).toBe("just now");
+    expect(formatRelative("2026-01-01T13:00:00Z", now)).toBe("in 1 hr.");
+  });
 });
 
 describe("schedule-zone days", () => {

@@ -29,7 +29,9 @@ export function formatRelative(iso: string | null | undefined, now: number = Dat
   if (!iso) return "—";
   const diff = (new Date(iso).getTime() - now) / 1000;
   const abs = Math.abs(diff);
-  if (abs < 45) return diff < 0 ? "just now" : "in a moment";
+  // `now` ticks every ~15s and server clocks drift, so a fresh event can look slightly in
+  // the future. Anything within two minutes ahead is "just now", not "in a moment".
+  if (abs < 45 || (diff > 0 && diff < 120)) return "just now";
   if (abs < HOUR) return rtf.format(Math.round(diff / MINUTE), "minute");
   if (abs < DAY) return rtf.format(Math.round(diff / HOUR), "hour");
   return rtf.format(Math.round(diff / DAY), "day");

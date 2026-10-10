@@ -74,4 +74,10 @@ describe("api client", () => {
     ).toBe("/api/v1/incidents/?status=triggered&page_size=25");
     expect(buildUrl("/api/v1/incidents/?cursor=abc")).toBe("/api/v1/incidents/?cursor=abc");
   });
+
+  it("keeps pagination links on this origin even if the backend names another host", () => {
+    expect(buildUrl("https://pulse-api.internal:8000/api/v1/incidents/?cursor=abc")).toBe(
+      "/api/v1/incidents/?cursor=abc",
+    );
+  });
 });

@@ -63,7 +63,13 @@ export interface RequestOptions {
 }
 
 export function buildUrl(path: string, query?: Query): string {
-  const url = path.startsWith("http") || path.startsWith(BASE) ? path : `${BASE}${path}`;
+  // Absolute URLs (e.g. DRF pagination links) are reduced to path + query: requests must stay
+  // on this origin for the session cookie, whatever host the backend thinks it is.
+  if (/^https?:\/\//.test(path)) {
+    const absolute = new URL(path);
+    path = absolute.pathname + absolute.search;
+  }
+  const url = path.startsWith(BASE) ? path : `${BASE}${path}`;
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {

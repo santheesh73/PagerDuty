@@ -13,7 +13,12 @@ for required in ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL"):
 DEBUG = False
 SECRET_KEY = os.environ["SECRET_KEY"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# The SPA's nginx proxies /api here and forwards the browser-facing host, so absolute URLs
+# (pagination links, admin redirects) point at the public origin.
+USE_X_FORWARDED_HOST = env_bool("USE_X_FORWARDED_HOST", True)
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+# Platform health checks speak plain HTTP inside the network; a 301 would mark us unhealthy.
+SECURE_REDIRECT_EXEMPT = [r"^healthz$", r"^readyz$"]
 SESSION_COOKIE_SECURE = env_bool("SECURE_COOKIES", True)
 CSRF_COOKIE_SECURE = env_bool("SECURE_COOKIES", True)
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))

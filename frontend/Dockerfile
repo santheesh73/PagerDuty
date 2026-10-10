@@ -12,6 +12,9 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 # Prod: static bundle served by nginx, /api proxied to the backend.
 FROM deps AS build
+# Public demo deployments show the demo logins on the sign-in page.
+ARG VITE_SHOW_DEMO_CREDENTIALS=false
+ENV VITE_SHOW_DEMO_CREDENTIALS=$VITE_SHOW_DEMO_CREDENTIALS
 COPY . .
 RUN npm run build
 
