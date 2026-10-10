@@ -388,7 +388,11 @@ function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: bool
               Copy
             </button>
           </div>
-          <pre className="overflow-x-auto rounded-lg bg-[#0f1320] p-3 font-mono text-[11px] leading-relaxed text-[#d7dcf0]">
+          <pre
+            tabIndex={0}
+            aria-label="Example Events API request"
+            className="overflow-x-auto rounded-lg bg-[#0f1320] p-3 font-mono text-[11px] leading-relaxed text-[#d7dcf0]"
+          >
             {curl}
           </pre>
           <p className="mt-2 text-xs text-subtle">

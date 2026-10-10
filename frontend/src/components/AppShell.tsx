@@ -140,7 +140,7 @@ function NotificationBell() {
     >
       <Bell className="size-5" aria-hidden />
       {count > 0 && (
-        <span className="tabular absolute -top-0.5 -right-0.5 min-w-4.5 rounded-full bg-critical px-1 text-center text-[10px] leading-4.5 font-semibold text-white">
+        <span className="tabular absolute -top-0.5 -right-0.5 min-w-4.5 rounded-full bg-critical-solid px-1 text-center text-[10px] leading-4.5 font-semibold text-on-solid">
           {count > 99 ? "99+" : count}
         </span>
       )}

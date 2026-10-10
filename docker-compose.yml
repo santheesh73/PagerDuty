@@ -46,7 +46,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulse}@db:5432/${POSTGRES_DB:-pulse}
       REDIS_URL: redis://redis:6379/0
-      SEED_DEMO: ${SEED_DEMO:-0}
+      SEED_DEMO: ${SEED_DEMO:-1}
     ports:
       - "8000:8000"
     depends_on:

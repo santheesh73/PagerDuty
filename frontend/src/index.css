@@ -13,7 +13,7 @@
   --border-strong: #cdd2da;
   --text: #121826;
   --muted: #5b6474;
-  --subtle: #8a93a3;
+  --subtle: #646c7e; /* ≥4.5:1 on every light surface */
   --accent: #4b4fe0;
   --accent-hover: #3d40c9;
   --accent-soft: #ecedfd;
@@ -35,6 +35,11 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
   --shadow-lg: 0 12px 32px rgb(16 24 40 / 0.14), 0 2px 6px rgb(16 24 40 / 0.08);
   /* Chart series: validated categorical slots 1–2 (CVD ΔE 24.7 on this surface). */
+  /* Solid fills that carry text (buttons, counters): ≥4.5:1 against --on-solid. */
+  --critical-solid: #b9262f;
+  --warning-solid: #a86206;
+  --good-solid: #18794a;
+  --on-solid: #ffffff;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-seq: #86b6ef;
@@ -50,7 +55,7 @@
   --border-strong: #343c4e;
   --text: #e7eaf0;
   --muted: #9aa3b5;
-  --subtle: #6c7589;
+  --subtle: #828a9c; /* ≥4.5:1 on every dark surface */
   --accent: #8487ff;
   --accent-hover: #9c9eff;
   --accent-soft: #23264a;
@@ -71,6 +76,10 @@
   --ring: #8487ff;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
+  --critical-solid: #f2545f;
+  --warning-solid: #f0a33a;
+  --good-solid: #3fbf7a;
+  --on-solid: #0c0f15;
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-seq: #256abf;
@@ -104,6 +113,10 @@
   --color-info-fg: var(--info-fg);
   --color-neutral-soft: var(--neutral-soft);
   --color-ring: var(--ring);
+  --color-critical-solid: var(--critical-solid);
+  --color-warning-solid: var(--warning-solid);
+  --color-good-solid: var(--good-solid);
+  --color-on-solid: var(--on-solid);
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
   --color-series-seq: var(--series-seq);

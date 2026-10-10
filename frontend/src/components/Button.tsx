@@ -10,9 +10,9 @@ const variants: Record<Variant, string> = {
   secondary:
     "bg-surface text-text border border-border hover:bg-surface-2 hover:border-border-strong shadow-card",
   ghost: "text-muted hover:text-text hover:bg-surface-2",
-  danger: "bg-critical text-white hover:brightness-110 shadow-card",
-  good: "bg-good text-white hover:brightness-110 shadow-card",
-  warning: "bg-warning text-white hover:brightness-110 shadow-card",
+  danger: "bg-critical-solid text-on-solid hover:brightness-110 shadow-card",
+  good: "bg-good-solid text-on-solid hover:brightness-110 shadow-card",
+  warning: "bg-warning-solid text-on-solid hover:brightness-110 shadow-card",
 };
 
 const sizes: Record<Size, string> = {

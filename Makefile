@@ -50,12 +50,12 @@ reseed: ## Wipe and re-seed demo data
 	$(BACKEND) python manage.py seed_demo --reset
 
 send-alert: ## Fire a live trigger at a seeded service (SERVICE=checkout-api)
-	@key="$(ROUTING_KEY)"; \
+	@set -e; key="$(ROUTING_KEY)"; \
 	if [ -z "$$key" ]; then key=$$($(BACKEND) python manage.py routing_key $(SERVICE)); fi; \
 	curl -sS -X POST http://localhost:8000/api/v1/events/ \
 	  -H 'Content-Type: application/json' \
 	  -d "{\"routing_key\":\"$$key\",\"event_action\":\"trigger\",\"dedup_key\":\"demo-$$(date +%s)\",\"payload\":{\"summary\":\"CPU above 95% on $(SERVICE)\",\"severity\":\"critical\",\"source\":\"make send-alert\"}}"; \
-	echo
+	echo; echo "  Open http://localhost:5173/incidents to watch it page and escalate."
 
 test-backend: ## Backend tests with coverage
 	$(BACKEND) pytest --cov --cov-report=term-missing:skip-covered

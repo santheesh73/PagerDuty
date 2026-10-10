@@ -90,7 +90,7 @@ export function ShiftTimeline({
                   }}
                 >
                   <span className="block truncate">{shift.user.name}</span>
-                  <span className="block truncate opacity-75">
+                  <span className="block truncate font-normal">
                     {override
                       ? "override"
                       : `${hhmm.format(new Date(shift.start))} → ${hhmm.format(new Date(shift.end))}`}
