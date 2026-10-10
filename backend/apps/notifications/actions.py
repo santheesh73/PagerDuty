@@ -105,8 +105,23 @@ def deliver(notification_id: int, *, now: datetime | None = None) -> Notificatio
         notification.attempts += 1
         try:
             CHANNELS[notification.channel].send(notification)
-        except ChannelError as exc:
-            notification.last_error = str(exc)[:2000]
+        except Exception as exc:
+            # Every failure a channel raises must count as an attempt. Catching only
+            # ChannelError let anything else (a bad header, an unknown channel key)
+            # escape before `attempts` was committed, so MAX_ATTEMPTS could never trip
+            # and `redispatch_stuck` re-drove the same poison row every sweep, forever.
+            if isinstance(exc, ChannelError):
+                notification.last_error = str(exc)[:2000]
+            else:
+                # Not a declared transient failure: keep the type so the row says what broke.
+                notification.last_error = f"{type(exc).__name__}: {exc}"[:2000]
+                logger.exception(
+                    "notification channel raised an unexpected error",
+                    extra={
+                        "notification_id": notification.pk,
+                        "channel": notification.channel,
+                    },
+                )
             if notification.attempts >= MAX_ATTEMPTS:
                 notification.status = Notification.Status.FAILED
                 notification.save(update_fields=["attempts", "last_error", "status", "updated_at"])
