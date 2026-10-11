@@ -116,7 +116,7 @@ drills). Checks, each reported PASS/FAIL:
 | `/readyz` is 503 | Postgres unreachable | restore the database; the API reconnects without a restart |
 | Port already allocated on `8025`/`8080`/`5173`/`8000` | the other stack or another program is using it | `make down` the other stack |
 | Two `beat` processes | a second Compose project or a scaled service | run exactly one; the healthcheck fails unless there is exactly one |
-| Tests under `make check LOCAL=1` are very slow | `DJANGO_SETTINGS_MODULE=config.settings.dev` exported from `.env` overrides the test settings | `env -u DJANGO_SETTINGS_MODULE make check LOCAL=1` |
+| `make test` / `make check` were several times slower than CI | `.env` exports `DJANGO_SETTINGS_MODULE=config.settings.dev`, and an environment variable beats `pytest.ini` | fixed: pytest now pins `--ds=config.settings.test`, guarded by `test_the_suite_runs_on_test_settings_whatever_the_environment_says` |
 
 ## Design notes an operator should know
 

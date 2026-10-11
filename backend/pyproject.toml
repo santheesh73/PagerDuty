@@ -70,7 +70,7 @@ django_settings_module = "config.settings.test"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --ds=config.settings.test"
 filterwarnings = [
     "error::RuntimeWarning",
     "ignore:No directory at:UserWarning",  # whitenoise: STATIC_ROOT is only built in images

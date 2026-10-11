@@ -346,6 +346,13 @@ The first API-crash drill used `docker compose kill`, which Docker treats as a m
 policy correctly left the container down. The drill now simulates real crashes: SIGKILL every gunicorn worker
 (the master must respawn them) and make PID 1 exit on its own (the restart policy must bring it back).
 
+### R10. `make test` took nearly nine minutes in the container
+`.env` exports `DJANGO_SETTINGS_MODULE=config.settings.dev`, and an environment variable beats the setting in
+`pytest.ini`, so the suite ran on dev settings (real password hashing, the real broker) instead of test
+settings: 8m42s for 240 tests, against under two minutes in CI. Found on the clean-clone run; the security
+audit had flagged the same variable. pytest now pins the module with `--ds`.
+[`test_the_suite_runs_on_test_settings_whatever_the_environment_says`]
+
 ### Smaller
 `backend/.dockerignore` now excludes `.env*`, `*.rdb` and `.git`; the SPA is served with `nosniff`,
 `X-Frame-Options` and `Referrer-Policy`; the throttle's fail-open path logs one line instead of a 40-line
