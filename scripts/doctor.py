@@ -19,6 +19,11 @@ What it checks
   7  forged X-Forwarded-For prefixes do not reset the login throttle
   8  drills: redis down, workers restarted, database down, API workers SIGKILLed and the
      API process exiting on its own (a `docker kill` is a manual stop, so it is not used)
+
+With --demo it checks the one-container demo (docker-compose.demo.yml) instead: no Redis, no
+worker, no Beat. A background thread plays the external scheduler and calls POST /internal/tick/
+every few seconds, so escalation and delivery must work through the tick alone; the tick's own
+guards (secret, method) are checked, and the redis and worker drills do not apply.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ import json
 import shlex
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -106,6 +112,8 @@ class Doctor:
         self.mail = args.mail.rstrip("/")
         self.service: dict = {}
         self.key = ""
+        self.ticks: Counter = Counter()
+        self._stop_ticking = threading.Event()
 
     # --- helpers -----------------------------------------------------------------------
     def dc(self, *cmd: str) -> bool:
@@ -160,7 +168,11 @@ class Doctor:
         check("liveness /healthz", status == 200 and body == {"status": "ok"}, f"{status}")
         status, body = self.ready()
         ok = status == 200 and isinstance(body, dict) and body.get("status") == "ok"
-        check("readiness /readyz checks database and redis", ok, json.dumps(body))
+        if self.a.demo:
+            ok = ok and body["checks"].get("redis") == "not used (demo mode)"
+            check("readiness /readyz checks the database and needs no Redis", ok, json.dumps(body))
+        else:
+            check("readiness /readyz checks database and redis", ok, json.dumps(body))
         status, body = anon.call("GET", "/")
         check("SPA is served", status == 200 and 'id="root"' in str(body), f"{status}")
         with urllib.request.urlopen(self.a.base + "/", timeout=10) as resp:
@@ -185,7 +197,7 @@ class Doctor:
         except urllib.error.HTTPError as exc:
             link_status, link_body = exc.code, exc.read().decode(errors="replace")
         check(
-            "one-tap action links reach Django through nginx (not the SPA)",
+            "one-tap action links reach Django, not the SPA",
             link_status == 404 and "Link not valid" in link_body,
             f"{link_status}",
         )
@@ -250,7 +262,8 @@ class Doctor:
 
         say("waiting for the level-1 page to go unanswered and escalate (about a minute)...")
         got = wait_for(lambda: "escalated" in self.timeline(inc), 140, 3)
-        check("unanswered page escalates on its own (worker + beat + broker)", bool(got))
+        how = "the tick alone, no worker" if self.a.demo else "worker + beat + broker"
+        check(f"unanswered page escalates on its own ({how})", bool(got))
         l1 = wait_for(lambda: len(self.mail_counts(number)) > len(l0 or {}), 30, 2)
         counts = self.mail_counts(number)
         check("level-2 responders are emailed, nobody twice", bool(l1) and set(counts.values()) == {1},
@@ -281,6 +294,42 @@ class Doctor:
             codes[-1] == 429,
             f"statuses {codes}",
         )
+
+    # --- demo mode -----------------------------------------------------------------------
+    def tick(self, secret: str | None = None, method: str = "POST"):
+        secret = self.a.tick_secret if secret is None else secret
+        return Session(self.a.base).call(method, "/internal/tick/", headers={"X-Tick-Secret": secret})
+
+    def start_ticker(self, every: float = 6.0) -> None:
+        """Play the external scheduler. Every 6 s stays under the tick's 12-per-minute limit."""
+
+        def loop() -> None:
+            while not self._stop_ticking.wait(every):
+                status, _ = self.tick()
+                self.ticks[status] += 1
+
+        threading.Thread(target=loop, daemon=True).start()
+
+    def demo_checks(self) -> None:
+        status, _ = self.tick(secret="")
+        check("tick without the secret is refused", status == 403, f"{status}")
+        status, _ = self.tick(secret="not-the-secret")
+        check("tick with a wrong secret is refused", status == 403, f"{status}")
+        status, _ = self.tick(method="GET")
+        check("tick only answers POST", status == 405, f"{status}")
+        status, body = self.tick()
+        check(
+            "tick with the secret runs Beat's work and reports it",
+            status == 200 and {"escalated", "notifications_sent", "healthy"} <= set(body or {}),
+            json.dumps(body),
+        )
+        if self.a.skip_drills:
+            return  # no compose access assumed
+        proc = subprocess.run([*self.compose, "ps", "--services"], capture_output=True, text=True,
+                              check=False)
+        services = set(proc.stdout.split())
+        check("the stack has no Redis, worker or Beat", not services & {"redis", "worker", "beat"},
+              " ".join(sorted(services)))
 
     # --- drills ------------------------------------------------------------------------
     def new_incident(self, label: str):
@@ -422,8 +471,13 @@ class Doctor:
         only = set(self.a.only.split(",")) if self.a.only else set(self.STEPS)
         if self.a.skip_drills:
             only -= {"redis", "worker", "db", "api"}
+        if self.a.demo:
+            only -= {"redis", "worker"}  # there is no Redis and no worker to take away
         if "basics" in only:
             self.basics()
+        if self.a.demo:
+            self.demo_checks()
+            self.start_ticker()
         if only - {"basics"} and self.sign_in():
             if "flow" in only:
                 self.alert_flow()
@@ -433,6 +487,9 @@ class Doctor:
                     fn()
             if "throttle" in only:
                 self.throttle_spoof()  # last: it deliberately trips the login throttle
+        self._stop_ticking.set()
+        if self.a.demo:
+            say(f"background ticks by status: {dict(self.ticks)}")
         failed = [r for r in RESULTS if not r[1]]
         print("\n" + "=" * 72)
         for name, ok, detail in RESULTS:
@@ -450,6 +507,8 @@ def main() -> int:
     p.add_argument("--mail", default="http://localhost:8025")
     p.add_argument("--skip-drills", action="store_true")
     p.add_argument("--only", help="comma list of: basics,flow,redis,worker,db,api,throttle")
+    p.add_argument("--demo", action="store_true", help="the one-container demo (no Redis/Celery)")
+    p.add_argument("--tick-secret", default="", help="X-Tick-Secret for --demo")
     return Doctor(p.parse_args()).run()
 
 

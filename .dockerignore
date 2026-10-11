@@ -1,0 +1,22 @@
+# For builds whose context is the repository root (deploy/demo/Dockerfile, ops/backup/Dockerfile).
+.git
+.github
+.bin
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/*.rdb
+backend/staticfiles
+frontend/dist
+frontend/coverage
+e2e
+loadtest
+docs
+.env
+.env.*
+doctor-logs.txt

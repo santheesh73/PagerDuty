@@ -22,7 +22,7 @@ SERVICE ?= checkout-api
 ROUTING_KEY ?=
 
 
-.PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor db-backup db-restore backup-drill lint-migrations \
+.PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor doctor-demo db-backup db-restore backup-drill lint-migrations \
         badge simulate loadtest e2e test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell audit
 
@@ -68,6 +68,9 @@ chaos-redis: ## Prove a Redis wipe can't lose a page (needs `make up`)
 
 doctor: ## Boot the prod-like stack from scratch and prove it works and survives failures (~8 min)
 	./scripts/doctor.sh
+
+doctor-demo: ## The same proof for the one-container demo: no Redis, no Celery, timers by /internal/tick/
+	DOCTOR_MODE=demo ./scripts/doctor.sh
 
 db-backup: ## Dump the database to backups/pulse-<timestamp>.dump (custom format)
 	@mkdir -p backups

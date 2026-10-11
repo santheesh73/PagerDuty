@@ -2,7 +2,6 @@ import hashlib
 
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
-from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import QuerySet
@@ -235,8 +234,7 @@ class PasswordResetRequestView(APIView):
         email = payload.validated_data["email"].lower()
         bucket = _email_bucket(email)
         try:
-            cache.add(bucket, 0, timeout=3600)
-            per_address = cache.incr(bucket)
+            per_address = ratelimit.hit(bucket, 3600)
         except Exception:
             per_address = 0
         user = User.objects.filter(email=email, is_active=True).first()

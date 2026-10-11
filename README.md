@@ -8,7 +8,7 @@
 
 ![An alert pages the on-call, escalates after a minute, is acknowledged, unacknowledged and resolved](docs/img/demo.gif)
 
-**Live demo:** not deployed yet. [`render.yaml`](render.yaml) deploys the whole stack as a Render Blueprint, re-seeded nightly ([deploy notes](#deploy)).
+**Live demo:** not deployed yet. [`render.yaml`](render.yaml) deploys a free one-container demo as a Render Blueprint, reseeded daily ([limits and steps](docs/DEPLOY.md)).
 **Demo logins** (seeded locally and on the demo): `responder@demo.local` / `demo1234` (on call for Payments), `admin@demo.local` / `demo1234` (team admin).
 
 > **Tenancy: one organisation per deployment.** Teams inside it are isolated from each other on every endpoint, and a test walks every route to prove it. Separate customers are *not* isolated from each other: run one deployment per organisation. See [docs/TENANCY.md](docs/TENANCY.md).
@@ -166,9 +166,12 @@ Tests are named after behaviour (`test_ack_stops_escalation`, `test_policy_edit_
 
 ## Deploy
 
-[`render.yaml`](render.yaml) is a Render Blueprint for the whole stack: managed Postgres 17 and Key Value (Redis), the API, worker, beat, the nginx-served SPA and a nightly `seed_demo --reset` cron job. In Render: **New → Blueprint → this repo**. Workers and cron jobs have no free tier on Render (≈ $7/month each on Starter).
+[docs/DEPLOY.md](docs/DEPLOY.md) has both paths, with their limits stated plainly.
 
-[`docker-compose.prod.yml`](docker-compose.prod.yml) runs the same production images on any Docker host: `SECRET_KEY=$(openssl rand -hex 32) docker compose -f docker-compose.prod.yml up --build -d` → <http://localhost:8080>. Production settings refuse to start without `SECRET_KEY`, `ALLOWED_HOSTS` and `DATABASE_URL`.
+- **A free demo:** one container ([`deploy/demo/Dockerfile`](deploy/demo/Dockerfile)) and a free Postgres, with no Redis and no Celery. Work due now runs in-process after commit, and timers are driven by a protected `POST /internal/tick/`. [`render.yaml`](render.yaml) is the Render Blueprint for it. CI boots it on every push and runs the whole alert flow through ticks alone (`make doctor-demo`).
+- **A real deployment** on one Docker host: the full stack behind Caddy TLS ([`deploy/compose.production.yml`](deploy/compose.production.yml)), with scheduled backups. [`scripts/deploy.sh`](scripts/deploy.sh) builds a release, migrates, starts it, smoke-tests it with [`scripts/smoke.sh`](scripts/smoke.sh), and rolls back automatically if that fails. `--rollback` returns to the previous release without a rebuild.
+
+Production settings refuse to start without `SECRET_KEY`, `ALLOWED_HOSTS` and `DATABASE_URL`. [`deploy/render-full.yaml`](deploy/render-full.yaml) deploys the full stack on Render; its workers have no free tier.
 
 ## Non-goals
 

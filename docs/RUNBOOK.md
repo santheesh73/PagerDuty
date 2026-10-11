@@ -63,6 +63,7 @@ Copy `.env.example` to `.env` for local use (it is git-ignored). Compose passes 
 | `BACKUP_*`, `RETENTION_DAYS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TX_TIMEOUT_MS`, `DB_CONN_MAX_AGE` | see DATA_SAFETY.md | backups (the compose `backup` service), retention (0 = keep everything), database session limits |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `PUBLIC_BASE_URL`, `ACTION_LINK_TTL_HOURS` | unset (SMS/voice off), FRONTEND_URL, 12 | channels, see [CHANNELS.md](CHANNELS.md) |
 | `REQUIRE_MFA_FOR_ADMINS`, `SESSION_HOURS`, `LOGIN_LOCKOUT_FAILURES`, `LOGIN_LOCKOUT_SECONDS`, `INTEGRATION_KEY_GRACE_HOURS`, `CSP_MODE`, `CSP_CONNECT_EXTRA` | on in prod settings (off in the local compose stacks), 12, 10, 900, 24, enforce, - | see [SECURITY_MODEL.md](SECURITY_MODEL.md) |
+| `DEMO_MODE`, `TICK_SECRET`, `DEMO_SELF_TICK_SECONDS`, `DEMO_RESET_HOURS`, `SPA_DIR`, `PORT` | off, unset, 0, 0, unset, 8000 | the one-container demo, see [DEPLOY.md](DEPLOY.md): no Redis or Celery, timers driven by `POST /internal/tick/` (404 unless both of the first two are set), Django serving the SPA from `SPA_DIR`. `PORT` is the API's listen port in every mode |
 | `SECURE_COOKIES`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` | `1`, `1`, one year in prod settings | the prod compose sets the first two to `0` for plain-HTTP `localhost`; **set them for real deployments** (HSTS is sticky, see DECISIONS #18) |
 
 ## Everyday commands
@@ -73,6 +74,7 @@ make logs          # tail every service                         make ps        #
 make migrate       # apply migrations (also runs on API start)  make seed      # demo data (idempotent)
 make db-backup     # backups/pulse-<time>.dump                  make db-restore FILE=backups/pulse-<time>.dump
 make doctor        # prove the whole stack, ~8 minutes
+make doctor-demo   # the same proof for the one-container demo (no Redis, no Celery)
 make chaos-redis   # wipe Redis mid-incident and assert nothing is lost
 ```
 

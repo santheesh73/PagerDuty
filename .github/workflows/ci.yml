@@ -130,12 +130,22 @@ jobs:
           tags: pulse-web:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+      - name: Demo image (one container)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: deploy/demo/Dockerfile
+          push: false
+          load: true
+          tags: pulse-demo:ci
+          cache-from: type=gha,scope=demo
+          cache-to: type=gha,mode=max,scope=demo
       - name: Install Trivy (pinned version, checksum-verified)
         run: ./scripts/install-trivy.sh "$RUNNER_TEMP/bin"
       - name: SBOM per image (CycloneDX)
         run: |
           mkdir -p sbom
-          for image in backend web backup; do
+          for image in backend web backup demo; do
             "$RUNNER_TEMP/bin/trivy" image --quiet --format cyclonedx \
               --output "sbom/pulse-$image.cdx.json" "pulse-$image:ci"
           done
@@ -147,7 +157,7 @@ jobs:
           path: sbom/
       - name: Images have no fixable HIGH or CRITICAL vulnerabilities (Trivy)
         run: |
-          for image in pulse-backend:ci pulse-web:ci pulse-backup:ci; do
+          for image in pulse-backend:ci pulse-web:ci pulse-backup:ci pulse-demo:ci; do
             "$RUNNER_TEMP/bin/trivy" image --no-progress --severity HIGH,CRITICAL --ignore-unfixed \
               --exit-code 1 "$image"
           done
@@ -253,6 +263,25 @@ jobs:
           name: doctor-logs
           path: doctor-logs.txt
 
+  demo-doctor:
+    name: Demo doctor (one container, no Redis, no Celery)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      # Boots docker-compose.demo.yml (Postgres, Mailpit and the one demo container), plays the
+      # external scheduler against /internal/tick/, and runs the alert flow and the database and
+      # API drills. Escalation has to work through the tick alone.
+      - name: make doctor-demo
+        run: DOCTOR_MODE=demo DOCTOR_LOGS=doctor-demo-logs.txt ./scripts/doctor.sh
+      - name: Upload stack logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: doctor-demo-logs
+          path: doctor-demo-logs.txt
+
   ops-rules:
     name: Ops (promtool alert rules · Grafana JSON · compose overlay)
     runs-on: ubuntu-latest
@@ -270,6 +299,19 @@ jobs:
         run: |
           SECRET_KEY=x METRICS_TOKEN=t GRAFANA_PASSWORD=p \
             docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml config -q
+      - name: Production overlay resolves, and Caddy accepts its config
+        run: |
+          export DOMAIN=pulse.example.com ACME_EMAIL=ops@example.com SECRET_KEY=x \
+            POSTGRES_PASSWORD=p EMAIL_HOST=smtp.example.com PULSE_TAG=ci
+          docker compose -f docker-compose.prod.yml -f deploy/compose.production.yml config -q
+          docker run --rm -e DOMAIN -e ACME_EMAIL -v "$PWD/deploy/caddy:/etc/caddy:ro" \
+            caddy:2.11.7-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Demo compose file resolves
+        run: SECRET_KEY=x TICK_SECRET=t docker compose -f docker-compose.demo.yml config -q
+      - name: Shell scripts pass shellcheck
+        run: |
+          shellcheck -e SC2329 scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
+            scripts/install-trivy.sh
 
   backup-drill:
     name: Backup drill (backup · restore · compare · boot API)

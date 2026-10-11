@@ -59,6 +59,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.security.middleware.MfaEnrolmentMiddleware",
+    "apps.core.demo.DemoAccountGuardMiddleware",
     "apps.core.idempotency.IdempotencyMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -368,6 +369,15 @@ _CSP_POLICY = {
 CSP_MODE = os.environ.get("CSP_MODE", "enforce")
 SECURE_CSP = _CSP_POLICY if CSP_MODE == "enforce" else {}
 SECURE_CSP_REPORT_ONLY = _CSP_POLICY if CSP_MODE == "report-only" else {}
+# The SPA's index page when Django serves it (the one-container demo image): the policy nginx sets
+# for it everywhere else (frontend/docker/15-pulse-headers.envsh). Its scripts are plain files from
+# 'self', so no nonce; React and Recharts set style attributes, hence inline styles only.
+SPA_CSP = {
+    **_CSP_POLICY,
+    "script-src": [CSP.SELF],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "connect-src": [CSP.SELF, *os.environ.get("CSP_CONNECT_EXTRA", "").split()],
+}
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
@@ -413,3 +423,37 @@ METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")
 HEARTBEAT_URL = os.environ.get("HEARTBEAT_URL", "")
 # Keep the JSON handler Django configured instead of Celery replacing it (worker logs stay JSON).
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
+
+# --- Demo mode ---------------------------------------------------------------------------------
+# DEMO_MODE=1 runs Pulse as a single container for free hosting tiers: no Redis, no Celery. What a
+# worker would do runs in-process right after commit; anything due later (escalation timers,
+# delayed notification steps, retries, service-mode expiry) is driven by POST /internal/tick/,
+# called by an external scheduler. Postgres already holds every timer and every pending page, so
+# nothing is lost between ticks, only delayed. See docs/DEPLOY.md.
+DEMO_MODE = env_bool("DEMO_MODE")
+TASKS_INLINE = DEMO_MODE
+# The tick endpoint answers 404 unless DEMO_MODE is on and this is set.
+TICK_SECRET = os.environ.get("TICK_SECRET", "")
+# A public demo's logins are shared, so visitors can change anything they like: reseed it from
+# scratch every this many hours, from the tick (0 = never).
+DEMO_RESET_HOURS = int(os.environ.get("DEMO_RESET_HOURS", "0"))
+# Also tick from within: after a response is sent, at most once per this many seconds (0 = never).
+DEMO_SELF_TICK_SECONDS = int(os.environ.get("DEMO_SELF_TICK_SECONDS", "0"))
+if DEMO_MODE:
+    # Throttles, the sign-in lockout, idempotency keys and the heartbeat need one store that
+    # every gunicorn worker shares; without Redis the database is it (`createcachetable`).
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "pulse_cache",
+        }
+    }
+
+# The built SPA. When set (the demo image), Django serves it: files through WhiteNoise, every
+# client-side route through apps.core.spa. Elsewhere nginx serves it and this stays empty.
+SPA_DIR = os.environ.get("SPA_DIR", "")
+if SPA_DIR:
+    WHITENOISE_ROOT = SPA_DIR
+    # Vite fingerprints everything under /assets/, so those are cached for a year.
+    WHITENOISE_IMMUTABLE_FILE_TEST = r"^/assets/.+-[\w-]{8,}\.\w+$"

@@ -1,0 +1,13 @@
+# TLS in front of the stack. Caddy obtains and renews the certificate for $DOMAIN by itself
+# (ports 80 and 443 must reach this host, and DNS must point at it).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	# Django sends HSTS on its own responses; this covers the SPA's static files too. One year,
+	# no includeSubdomains, no preload (both are hard to undo: docs/DECISIONS.md).
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:8080
+}

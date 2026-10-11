@@ -1,11 +1,12 @@
 from django.conf import settings
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponseRedirect
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.utils.csp import CSP
 from django.views.decorators.csp import csp_override
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from apps.core import spa, tick
 from apps.core.health import healthz, readyz
 from apps.core.metrics import metrics_view
 from apps.notifications import action_views, webhooks
@@ -48,4 +49,8 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", api_docs, name="docs"),
     path("api/v1/", include("config.api_urls")),
+    path("internal/tick/", tick.tick, name="tick"),
+    # Last: every other path is a client-side route of the SPA when Django serves it (SPA_DIR, the
+    # demo image), and a plain 404 otherwise. Django's own prefixes never fall through to it.
+    re_path(r"^(?!(?:api|admin|static|internal)(?:/|$)|a/|(?:healthz|readyz|metrics)$)", spa.index),
 ]

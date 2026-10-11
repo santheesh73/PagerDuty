@@ -1,0 +1,60 @@
+# Pulse as one container (deploy/demo/Dockerfile): the shape of the free hosted demo, run locally.
+# No Redis, no workers, no Beat. Something must call POST /internal/tick/ for timers to fire:
+#
+#   export SECRET_KEY=$(openssl rand -hex 32) TICK_SECRET=$(openssl rand -hex 16)
+#   docker compose -f docker-compose.demo.yml up --build -d          → http://localhost:8080
+#   while sleep 30; do curl -fsS -X POST -H "X-Tick-Secret: $TICK_SECRET" localhost:8080/internal/tick/; done
+#
+# `make doctor-demo` boots this and proves the whole alert flow works on it. Mailpit is here
+# only so pages can be checked; a hosted demo prints emails to its log instead.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulse
+      POSTGRES_DB: pulse
+    volumes: [demo_pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse -d pulse"], interval: 3s, retries: 20 }
+
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports: ["8025:8025"]
+    healthcheck: { test: ["CMD", "/mailpit", "readyz"], interval: 5s, retries: 12 }
+
+  app:
+    build:
+      context: .
+      dockerfile: deploy/demo/Dockerfile
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY, e.g. SECRET_KEY=$(openssl rand -hex 32)}
+      TICK_SECRET: ${TICK_SECRET:?set TICK_SECRET, e.g. TICK_SECRET=$(openssl rand -hex 16)}
+      DATABASE_URL: postgres://pulse:pulse@db:5432/pulse
+      PORT: "8080"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: http://localhost:8080
+      FRONTEND_URL: http://localhost:8080
+      # Plain HTTP on localhost; a hosted demo keeps both on (its platform terminates TLS).
+      SECURE_SSL_REDIRECT: "0"
+      SECURE_COOKIES: "0"
+      # Nothing sits in front of the container here, so trust no X-Forwarded-For entry.
+      NUM_PROXIES: "0"
+      DEMO_RESET_HOURS: ${DEMO_RESET_HOURS:-0}
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      DEFAULT_FROM_EMAIL: pulse@localhost
+    ports: ["8080:8080"]
+    depends_on:
+      db: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  demo_pgdata:

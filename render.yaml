@@ -1,113 +1,41 @@
-# Render Blueprint for the public Pulse demo: https://render.com/docs/blueprint-spec
-# New → Blueprint → pick this repo. Render creates everything below and wires the secrets.
+# Render Blueprint for the free public demo (https://render.com/docs/blueprint-spec): ONE web
+# service built from deploy/demo/Dockerfile (Django serves the API and the SPA; no Redis, no
+# Celery) and a free Postgres. Nothing here costs money. New → Blueprint → this repo.
 #
-# Free tiers cover the database, Redis and both web services. Background workers and cron
-# jobs have no free tier on Render, so the worker, beat and nightly reseed are "starter".
-# Service names must be unique per Render account: if `pulse-web` / `pulse-api` are taken,
-# rename them here and update API_UPSTREAM / ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS to match.
-
-envVarGroups:
-  - name: pulse-backend
-    envVars:
-      - key: DJANGO_SETTINGS_MODULE
-        value: config.settings.prod
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ALLOWED_HOSTS
-        value: .onrender.com
-      - key: CSRF_TRUSTED_ORIGINS
-        value: https://pulse-web.onrender.com
-      - key: FRONTEND_URL
-        value: https://pulse-web.onrender.com
-      - key: SEED_DEMO
-        value: "1"
-      # One year. Safe here because Render serves these hosts over HTTPS only; the code default
-      # stays 0 (see docs/DECISIONS.md, "HSTS is opt-in"). No includeSubdomains, no preload.
-      - key: SECURE_HSTS_SECONDS
-        value: "31536000"
-      - key: GUNICORN_WORKERS
-        value: "2"
-      - key: CELERY_CONCURRENCY
-        value: "2"
+# docs/DEPLOY.md covers the limits (a free instance sleeps when idle; free Postgres expires after
+# 30 days) and the tick scheduler. The full stack is deploy/render-full.yaml (workers are paid).
+# Service names are unique per Render account: if `pulse-demo` is taken, rename it here and in
+# CSRF_TRUSTED_ORIGINS / FRONTEND_URL.
 
 databases:
-  - name: pulse-db
+  - name: pulse-demo-db
     databaseName: pulse
     user: pulse
     plan: free
     postgresMajorVersion: "17"
 
 services:
-  - type: keyvalue
-    name: pulse-redis
-    plan: free
-    ipAllowList: [] # reachable only from this account's services
-    maxmemoryPolicy: noeviction
-
   - type: web
-    name: pulse-api
+    name: pulse-demo
     runtime: docker
-    rootDir: backend
     plan: free
+    dockerfilePath: ./deploy/demo/Dockerfile
+    dockerContext: .
     healthCheckPath: /healthz
-    dockerCommand: /app/docker/entrypoint.sh api
     envVars:
-      - fromGroup: pulse-backend
+      - key: SECRET_KEY
+        generateValue: true
+      # Copy it into the repository secret PULSE_TICK_SECRET to switch on .github/workflows/demo-tick.yml.
+      - key: TICK_SECRET
+        generateValue: true
       - key: DATABASE_URL
-        fromDatabase: { name: pulse-db, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: keyvalue, name: pulse-redis, property: connectionString }
-
-  - type: worker
-    name: pulse-worker
-    runtime: docker
-    rootDir: backend
-    plan: starter
-    dockerCommand: /app/docker/entrypoint.sh worker
-    envVars:
-      - fromGroup: pulse-backend
-      - key: DATABASE_URL
-        fromDatabase: { name: pulse-db, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: keyvalue, name: pulse-redis, property: connectionString }
-
-  - type: worker
-    name: pulse-beat
-    runtime: docker
-    rootDir: backend
-    plan: starter
-    dockerCommand: /app/docker/entrypoint.sh beat
-    envVars:
-      - fromGroup: pulse-backend
-      - key: DATABASE_URL
-        fromDatabase: { name: pulse-db, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: keyvalue, name: pulse-redis, property: connectionString }
-
-  - type: web
-    name: pulse-web
-    runtime: docker
-    rootDir: frontend
-    plan: free
-    healthCheckPath: /
-    envVars:
-      - key: API_UPSTREAM
-        value: https://pulse-api.onrender.com
-      # Passed to `docker build` as a build arg: shows the demo logins on the sign-in page.
-      - key: VITE_SHOW_DEMO_CREDENTIALS
-        value: "true"
-
-  # Wipe and re-seed every night so the public demo never drifts or goes stale.
-  - type: cron
-    name: pulse-reseed
-    runtime: docker
-    rootDir: backend
-    plan: starter
-    schedule: "0 4 * * *"
-    dockerCommand: /app/docker/entrypoint.sh python manage.py seed_demo --reset
-    envVars:
-      - fromGroup: pulse-backend
-      - key: DATABASE_URL
-        fromDatabase: { name: pulse-db, property: connectionString }
-      - key: REDIS_URL
-        fromService: { type: keyvalue, name: pulse-redis, property: connectionString }
+        fromDatabase: { name: pulse-demo-db, property: connectionString }
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://pulse-demo.onrender.com
+      - key: FRONTEND_URL
+        value: https://pulse-demo.onrender.com
+      # Render's proxy is the one hop in front of the container.
+      - key: NUM_PROXIES
+        value: "1"

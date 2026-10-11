@@ -1,0 +1,80 @@
+# A real deployment on one Docker host: docker-compose.prod.yml plus this overlay.
+# Adds TLS (Caddy), real secrets and hostnames, tags images by release for rollback, and drops
+# the local-only pieces (Mailpit, the published nginx port). scripts/deploy.sh drives it:
+#
+#   cp deploy/.env.production.example .env.production   # fill it in
+#   ./scripts/deploy.sh                                  # build, migrate, start, smoke, record
+#   ./scripts/deploy.sh --rollback                       # back to the previous release
+#
+# docs/DEPLOY.md walks through it. Needs Docker Compose 2.24+ (for !override / !reset).
+
+x-release-env: &release-env
+  ALLOWED_HOSTS: ${DOMAIN:?set DOMAIN}
+  CSRF_TRUSTED_ORIGINS: https://${DOMAIN}
+  FRONTEND_URL: https://${DOMAIN}
+  DATABASE_URL: postgres://pulse:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/pulse
+  SECURE_SSL_REDIRECT: "1"
+  SECURE_COOKIES: "1"
+  REQUIRE_MFA_FOR_ADMINS: "1"
+  SEED_DEMO: "0"
+  # Caddy, then nginx, each append to X-Forwarded-For.
+  NUM_PROXIES: "2"
+  EMAIL_HOST: ${EMAIL_HOST:?set EMAIL_HOST to a real SMTP server}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-1}
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: { web: { condition: service_healthy } }
+    restart: unless-stopped
+
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  mailpit:
+    profiles: ["local-only"]  # never started here: pages go to the real SMTP server
+
+  backup:
+    image: pulse-backup:${PULSE_TAG:?set PULSE_TAG (scripts/deploy.sh does)}
+    environment:
+      DATABASE_URL: postgres://pulse:${POSTGRES_PASSWORD}@db:5432/pulse
+
+  api:
+    image: pulse-api:${PULSE_TAG}
+    environment: *release-env
+    depends_on: !override
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker-escalations:
+    image: pulse-api:${PULSE_TAG}
+    environment: *release-env
+
+  worker:
+    image: pulse-api:${PULSE_TAG}
+    environment: *release-env
+
+  beat:
+    image: pulse-api:${PULSE_TAG}
+    environment: *release-env
+
+  web:
+    image: pulse-web:${PULSE_TAG}
+    build:
+      args:
+        VITE_SHOW_DEMO_CREDENTIALS: "false"
+    ports: !reset []  # reachable only through Caddy
+
+volumes:
+  caddy_data:
+  caddy_config:

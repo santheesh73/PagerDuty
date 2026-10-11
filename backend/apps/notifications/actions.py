@@ -364,6 +364,36 @@ def redispatch_stuck(*, now: datetime | None = None, limit: int = 500) -> int:
     return len(ids)
 
 
+def deliver_due(*, now: datetime | None = None, limit: int = 100) -> int:
+    """Send pending notifications that are due, in this process. Returns how many were sent.
+
+    For demo mode, where there is no worker: a page whose inline send failed, or a later step of a
+    personal plan whose time has come, is sent here by `/internal/tick/`. Each send goes through
+    the same claim, so a concurrent tick or inline send can never page twice (I4).
+    """
+    now = now or timezone.now()
+    ids = list(
+        Notification.objects.filter(
+            Q(not_before__isnull=True) | Q(not_before__lte=now),
+            status=Notification.Status.PENDING,
+            attempts__lt=MAX_ATTEMPTS,
+        )
+        .order_by("pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    sent = 0
+    for pk in ids:
+        try:
+            result = deliver(pk, now=now)
+        except ChannelError:
+            continue  # the attempt is counted; the next tick tries again
+        except Exception:
+            logger.exception("tick delivery failed", extra={"notification_id": pk})
+            continue
+        sent += bool(result and result.status == Notification.Status.SENT)
+    return sent
+
+
 def mark_read(notification: Notification, *, now: datetime | None = None) -> Notification:
     if notification.read_at is None:
         notification.read_at = now or timezone.now()
