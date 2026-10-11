@@ -151,7 +151,9 @@ services:
     depends_on:
       backend: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:5173/"]
+      # 127.0.0.1, not localhost: BusyBox wget tries ::1 first and does not fall back, and Vite
+      # listens on IPv4 only, so "localhost" fails on any host with IPv6 enabled.
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:5173/"]
       interval: 10s
       timeout: 3s
       retries: 12
