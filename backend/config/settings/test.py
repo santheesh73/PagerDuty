@@ -13,3 +13,5 @@ LOGGING = {"version": 1, "disable_existing_loggers": False}
 # Engine tests call actions directly; on_commit dispatch goes nowhere unless a test opts in.
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_BROKER_URL = "memory://"
+
+WEBHOOK_ALLOW_PRIVATE = False  # tests opt in per test; the default must stay safe

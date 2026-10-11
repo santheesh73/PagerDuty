@@ -429,3 +429,30 @@ before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line m
   test. All three can be set to 0 for poolers that reject startup options.
 - **Celery `visibility_timeout` is an explicit 3600 s** rather than an inherited default, with the
   reasoning written next to it: recovery of a dead worker's page does not depend on it.
+
+
+## Channels (production-readiness, phase 3)
+
+- **Twilio over its REST API, no SDK.** Two form POSTs and a signature check do not justify a
+  dependency; `TWILIO_API_BASE` lets the tests talk HTTP to a local fake.
+- **Webhooks instead of browser push.** One signed, SSRF-guarded HTTP channel covers Slack, Teams and
+  anything a team already has, without VAPID keys, a service worker and per-browser subscriptions.
+  Push is listed as not built.
+- **Rules snapshot into rows, not into the incident.** Each step becomes a Notification with its own
+  `not_before`, so the same claim/settle/sweep machinery that made email safe makes delayed SMS and
+  calls safe, and "edit rules later" cannot change a page already made.
+- **Permanent vs transient failures.** Before this, every failure retried five times. A bad phone number
+  or an unconfigured channel now fails at once, visibly, because retrying a page that cannot succeed
+  only delays the moment someone notices.
+- **Links act on POST only.** Mail scanners and link unfurlers GET every URL; acting on GET would let
+  them acknowledge incidents nobody saw.
+- **Found while building it:** `page()` used the wall clock rather than the caller's `now`, so delayed
+  steps would have been scheduled from the wrong time under a skewed (or simulated) clock. All four call
+  sites now pass `now`.
+- **The migration linter caught two real problems in this phase's own migration.** The first draft
+  added indexes to the live `notifications` table non-concurrently (a write lock while paging) and
+  let Django drop the new columns' defaults (inserts from the previous release would fail during a
+  rolling deploy). The columns now keep a database default (`db_default`), the indexes are built
+  `CONCURRENTLY` in a separate non-atomic migration, and `test_migration_0004.py` pins that SQL
+  because the linter cannot tell a kept default from a dropped one (that one migration is on its
+  ignore list, with the reason in `config/settings/lint.py`).

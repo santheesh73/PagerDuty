@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from django.db.models import Count, Q
 
 from apps.incidents.models import EventType, Incident, IncidentEvent, Status
-from apps.notifications.actions import idempotency_key
-from apps.notifications.channels import PAGE_CHANNELS
+from apps.notifications.actions import page_key
 from apps.notifications.models import Notification
 
 # Human actions that count as a first response (incidents/actions.py::FIRST_RESPONSE_ACTIONS).
@@ -144,10 +143,14 @@ def _i9_first_response_is_human(incident: Incident) -> list[Violation]:
 
 
 def _i5_every_paged_responder_has_a_row(incident: Incident) -> list[Violation]:
-    """Every responder a paging event names must have a row per channel (any status)."""
+    """Every responder a paging event names has rows for that page, including the inbox entry.
+
+    Which other channels exist depends on the person's own plan (snapshotted per page), so the
+    check is "the page was planned at all": rows sharing the page's `page_key`, one of them in-app.
+    """
     if incident.is_maintenance:
         return []
-    keys = set(incident.notifications.values_list("idempotency_key", flat=True))
+    pairs = set(incident.notifications.values_list("page_key", "channel"))
     found = []
     paging = incident.events.filter(
         Q(type__in=[EventType.TRIGGERED, EventType.ESCALATED, EventType.MANUAL_ESCALATED])
@@ -160,30 +163,27 @@ def _i5_every_paged_responder_has_a_row(incident: Incident) -> list[Violation]:
             continue
         recipients = recipients if isinstance(recipients, list) else [recipients]
         for user_id in recipients:
-            for channel in PAGE_CHANNELS:
-                if event.type in (EventType.UNACKNOWLEDGED, EventType.REASSIGNED):
-                    suffix = f":user:{user_id}:channel:{channel}:seq:{event.pk}"
-                    present = any(
-                        k.startswith(f"incident:{incident.pk}:") and k.endswith(suffix)
-                        for k in keys
+            if event.type in (EventType.UNACKNOWLEDGED, EventType.REASSIGNED):
+                tail = f":user:{user_id}:seq:{event.pk}"
+                channels = {
+                    c
+                    for k, c in pairs
+                    if k.startswith(f"incident:{incident.pk}:") and k.endswith(tail)
+                }
+            else:
+                wanted = page_key(
+                    incident.pk, data.get("level", 0), data.get("loop", 0), user_id, None
+                )
+                channels = {c for k, c in pairs if k == wanted}
+            if "in_app" not in channels:
+                found.append(
+                    Violation(
+                        "I5",
+                        incident.pk,
+                        f"{event.type} event {event.pk} paged user {user_id} "
+                        f"but no inbox row exists for that page",
                     )
-                else:
-                    present = (
-                        idempotency_key(
-                            incident.pk, data.get("level", 0), data.get("loop", 0), user_id, channel
-                        )
-                        in keys
-                    )
-                if not present:
-                    found.append(
-                        Violation(
-                            "I5",
-                            incident.pk,
-                            f"{event.type} event {event.pk} "
-                            f"paged user {user_id} but no "
-                            f"{channel} row exists",
-                        )
-                    )
+                )
     return found
 
 

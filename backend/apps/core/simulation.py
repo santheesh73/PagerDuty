@@ -13,7 +13,11 @@ clock — while injecting faults:
     clock_skew       a sweep runs with the clock jittered by up to ±90 s
     policy_edit      a live policy is rewritten while incidents escalate
     mode_flip        a service switches to debug/maintenance/active mid-flight
-    channel_failure  email delivery raises (retried with backoff, then fails)
+    channel_failure  email/SMS delivery raises (retried with backoff, then fails)
+
+Some simulated people have personal notification plans (SMS now, a call after 2-5 minutes, a
+webhook...). Those add two checks to every send: a later step never goes out before its time
+(I19), and never after the incident was acknowledged or resolved (I18, C1).
 
 After every operation it checks every database-checkable invariant (apps/core/invariants.py)
 plus the ones only an observer can see: each Notification is sent at most once (I4), due
@@ -39,6 +43,7 @@ from typing import Any
 from unittest import mock
 
 from django.db import connection, transaction
+from django.test import override_settings
 
 from apps.accounts.models import Membership, Team, User
 from apps.alerting.actions import Event, ingest
@@ -52,8 +57,15 @@ from apps.escalations.tasks import escalate_incident, sweep_due_escalations
 from apps.incidents import actions as incident_actions
 from apps.incidents.models import EventType, Incident, Status
 from apps.notifications import actions as notification_actions
-from apps.notifications.channels import ChannelError, EmailChannel, InAppChannel
-from apps.notifications.models import Notification
+from apps.notifications.channels import (
+    ChannelError,
+    EmailChannel,
+    InAppChannel,
+    SmsChannel,
+    VoiceChannel,
+    WebhookChannel,
+)
+from apps.notifications.models import Notification, NotificationRule, UserContact
 from apps.notifications.tasks import deliver_notification
 from apps.schedules.models import (
     LayerMember,
@@ -196,11 +208,26 @@ class Simulation:
         def in_app_send(channel: InAppChannel, notification: Notification) -> None:
             sim._record_send(notification)
 
+        def external_send(channel: Any, notification: Notification) -> None:
+            # SMS, voice and webhook share one fake: flaky like SMTP, otherwise they just record.
+            if sim.email_flaky and sim.rng.random() < 0.5:
+                sim.report.faults["channel_failure"] += 1
+                raise ChannelError("simulated carrier failure")
+            sim._record_send(notification)
+
         with (
+            override_settings(
+                TWILIO_ACCOUNT_SID="sim",
+                TWILIO_AUTH_TOKEN="sim",  # noqa: S106 - a fake for the simulator
+                TWILIO_FROM_NUMBER="+15005550006",
+            ),
             mock.patch.object(escalate_incident, "apply_async", apply_async("escalate")),
             mock.patch.object(deliver_notification, "apply_async", apply_async("deliver")),
             mock.patch.object(EmailChannel, "send", email_send),
             mock.patch.object(InAppChannel, "send", in_app_send),
+            mock.patch.object(SmsChannel, "send", external_send),
+            mock.patch.object(VoiceChannel, "send", external_send),
+            mock.patch.object(WebhookChannel, "send", external_send),
         ):
             yield
 
@@ -228,6 +255,19 @@ class Simulation:
                 "I12",
                 f"notification {notification.pk} sent for debug service {incident.service.name}",
             )
+        if notification.not_before is not None:
+            if self.now < notification.not_before:
+                self._defer_failure(
+                    "I19",
+                    f"notification {notification.pk} sent at {self.now}, "
+                    f"before its time {notification.not_before}",
+                )
+            if incident.status != Status.TRIGGERED:
+                self._defer_failure(
+                    "I18",
+                    f"delayed step {notification.pk} sent while incident "
+                    f"#{incident.number} was {incident.status}",
+                )
         if incident.status == Status.RESOLVED:
             self._defer_failure(
                 "C1",
@@ -250,6 +290,7 @@ class Simulation:
             ]
             for user in users:
                 Membership.objects.create(team=team, user=user, role=Membership.Role.RESPONDER)
+                self._random_plan(user)
             self.users_by_team[team.pk] = users
             schedules = [
                 self._random_schedule(team, users, rng.choice(zones), s)
@@ -271,6 +312,29 @@ class Simulation:
                         ),
                     )
                 )
+
+    def _random_plan(self, user: User) -> None:
+        """Half the people keep the default; the rest get a verified phone and a plan."""
+        rng = self.rng
+        if rng.random() < 0.5:
+            return
+        UserContact.objects.create(
+            user=user,
+            phone_number=f"+1415555{user.pk % 10000:04d}",
+            phone_verified_at=START,
+            webhook_url="https://hooks.sim.invalid/services/x",
+            webhook_secret="sim-secret",  # noqa: S106
+        )
+        plan = [("sms", 0), ("voice", rng.choice([2, 5])), ("sms", rng.choice([1, 3])),
+                ("email", rng.choice([0, 2])), ("webhook", rng.choice([0, 1]))]  # fmt: skip
+        for position, (channel, delay) in enumerate(rng.sample(plan, k=rng.randint(1, len(plan)))):
+            NotificationRule.objects.create(
+                user=user,
+                position=position,
+                channel=channel,
+                delay_minutes=delay,
+                urgency=rng.choice(["any", "any", "any", "high", "low"]),
+            )
 
     def _random_schedule(self, team: Team, users: list[User], zone: str, n: int) -> Schedule:
         rng = self.rng

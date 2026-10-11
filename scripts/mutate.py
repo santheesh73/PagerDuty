@@ -45,6 +45,7 @@ class M:
 
 MATRIX = ["apps/core/tests/test_tenant_matrix.py"]
 SAFE = ["apps/core/tests/test_data_safety.py"]
+CHAN = ["apps/notifications/tests"]
 OBS = ["apps/core/tests/test_observability.py"]
 
 MUTATIONS: list[M] = [
@@ -153,7 +154,7 @@ MUTATIONS: list[M] = [
       "django.request log records keep the query string"),
     # --- data safety -----------------------------------------------------------------------
     M("migrate-lock", "apps/core/management/commands/migrate_safely.py",
-      'cursor.execute("SELECT pg_advisory_lock(%s)", [LOCK_KEY])', "pass", SAFE,
+      "                if cursor.fetchone()[0]:", "                if True:", SAFE,
       "concurrent migrate on a fresh database crashes (3 of 4 processes)"),
     M("retention-keeps-open", "apps/core/retention.py",
       "Incident.objects.filter(status=Status.RESOLVED, resolved_at__lt=cutoff)",
@@ -167,6 +168,48 @@ MUTATIONS: list[M] = [
     M("db-statement-timeout", "config/settings/base.py", '("statement_timeout", "DB_STATEMENT_TIMEOUT_MS", 15_000),',
       '("statement_timeout", "DB_STATEMENT_TIMEOUT_MS", 0),', SAFE,
       "a runaway query is no longer cancelled"),
+    # --- channels -------------------------------------------------------------------------
+    M("step-not-before", "apps/notifications/actions.py",
+      "            if now < notification.not_before:", "            if False:", CHAN,
+      "a delayed step is sent early"),
+    M("step-cancel-on-ack", "apps/notifications/actions.py",
+      "            if incident.status != Status.TRIGGERED:\n                # I18",
+      "            if False:\n                # I18", ["apps/notifications/tests/test_rules.py"],
+      "a delayed step is sent after the incident was acknowledged (claim guard)"),
+    M("page-snapshot-once", "apps/notifications/actions.py",
+      "        if Notification.objects.filter(incident=incident, page_key=key_prefix).exists():",
+      "        if False:", CHAN, "editing rules re-plans a page that already happened"),
+    M("link-single-use", "apps/notifications/links.py",
+      "            jti=parsed.jti, action=parsed.action, used_at__isnull=True, expires_at__gt=now",
+      "            jti=parsed.jti, action=parsed.action, expires_at__gt=now", CHAN,
+      "an acknowledge link works more than once"),
+    M("link-expiry", "apps/notifications/links.py",
+      "    if link is None or link.used_at is not None or link.expires_at <= now:",
+      "    if link is None or link.used_at is not None:", CHAN, "an expired link still opens"),
+    M("link-signature", "apps/notifications/links.py",
+      "    if code not in _CODE_ACTION or not hmac.compare_digest(mac, _mac(jti, expiry, code)):",
+      "    if code not in _CODE_ACTION:", CHAN, "forged link tokens are accepted"),
+    M("link-actor-check", "apps/notifications/link_actions.py",
+      "    if not user.is_active or not has_role(user, incident.service.team_id, Role.RESPONDER):",
+      "    if False:", CHAN, "a deactivated or removed person can still act via an old link"),
+    M("twilio-signature", "apps/notifications/providers.py",
+      "    return hmac.compare_digest(expected.encode(), signature.encode())", "    return True",
+      CHAN, "unsigned Twilio callbacks are trusted"),
+    M("receipt-monotonic", "apps/notifications/actions.py",
+      "        if rank <= current:\n            return notification",
+      "        if False:\n            return notification", CHAN,
+      "replayed or late receipts move the state backwards"),
+    M("ssrf-private", "apps/core/safe_http.py",
+      "        if not allow_private and not _is_public(address):",
+      "        if False:", ["apps/core/tests/test_safe_http.py", "apps/notifications/tests"],
+      "webhooks can reach internal addresses"),
+    M("ssrf-pinned-ip", "apps/core/safe_http.py",
+      "        sock = socket.create_connection((self._ip, self.port), self.timeout)",
+      "        sock = socket.create_connection((self.host, self.port), self.timeout)",
+      ["apps/core/tests/test_safe_http.py"], "DNS rebinding: the connection re-resolves the name"),
+    M("phone-code-attempts", "apps/notifications/views.py",
+      "            if contact.phone_code_attempts >= CODE_MAX_ATTEMPTS:",
+      "            if False:", CHAN, "unlimited guesses at a 6-digit verification code"),
 ]
 
 

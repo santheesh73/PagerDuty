@@ -5,7 +5,15 @@ both try to create the same tables and one dies with `duplicate key ... pg_type_
 (reproduced: 3 of 4 concurrent runs failed, three rounds out of three). Starting several API
 replicas at once does exactly that. Holding a session-level advisory lock makes the others wait
 and then find nothing left to do.
+
+Waiters *poll* `pg_try_advisory_lock` instead of blocking in `pg_advisory_lock`. A blocked call is
+an open transaction, and `CREATE INDEX CONCURRENTLY` (used by non-atomic migrations) waits for every
+open transaction to finish, so the migrating process and the waiters deadlocked (reproduced: one
+process killed with `deadlock detected`, the rest then tripping over its half-built index). Each
+poll is an instant statement, so waiters hold nothing between tries.
 """
+
+import time
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
@@ -13,6 +21,7 @@ from django.db import connection
 
 # Arbitrary, stable, namespaced away from the per-incident locks in apps/core/locks.py.
 LOCK_KEY = 0x50554C5345  # "PULSE"
+POLL_SECONDS = 0.5
 
 
 class Command(BaseCommand):
@@ -33,7 +42,15 @@ class Command(BaseCommand):
             # statement/lock timeouts that protect request handling.
             cursor.execute("SET statement_timeout = 0")
             cursor.execute("SET lock_timeout = 0")
-            cursor.execute("SELECT pg_advisory_lock(%s)", [LOCK_KEY])
+            waited = 0.0
+            while True:
+                cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_KEY])
+                if cursor.fetchone()[0]:
+                    break
+                if waited == 0:
+                    self.stdout.write("Another process is migrating; waiting for it to finish.")
+                time.sleep(POLL_SECONDS)
+                waited += POLL_SECONDS
             try:
                 # From here a migration that cannot get its table lock fails fast instead of
                 # queueing behind a long transaction and blocking all traffic behind itself.

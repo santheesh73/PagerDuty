@@ -8,9 +8,12 @@ re-drives every row still pending.
 
 import logging
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -19,8 +22,8 @@ from apps.core import dispatch
 from apps.incidents.models import EventType, Incident, Status
 from apps.incidents.timeline import record
 
-from .channels import CHANNELS, PAGE_CHANNELS, ChannelError
-from .models import Notification
+from .channels import CHANNELS, ChannelError, PermanentChannelError, unavailable_reason
+from .models import Notification, NotificationRule, UserContact
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,53 @@ def idempotency_key(
     return f"{key}:seq:{seq}" if seq is not None else key
 
 
+@dataclass(frozen=True)
+class Step:
+    """One thing to do for one person when they are paged: a channel, and how long to wait."""
+
+    channel: str
+    position: int | None  # the rule's position; None for the built-in defaults
+    delay_minutes: int = 0
+
+    @property
+    def snapshot(self) -> dict:
+        if self.position is None:
+            return {}
+        return {
+            "v": 1,
+            "position": self.position,
+            "channel": self.channel,
+            "delay_minutes": self.delay_minutes,
+        }
+
+
+def steps_for(user: User, incident: Incident) -> list[Step]:
+    """The person's plan for this incident, read once at page time.
+
+    The inbox entry is always created. With no enabled personal rules the default is email
+    immediately; with rules, the rules that match the incident's urgency are the plan (so a
+    person who only wants calls for high urgency gets exactly that).
+    """
+    steps = [Step(Notification.Channel.IN_APP, None)]
+    rules = list(
+        NotificationRule.objects.filter(user=user, enabled=True).order_by(
+            "delay_minutes", "position"
+        )
+    )
+    if not rules:
+        steps.append(Step(Notification.Channel.EMAIL, None))
+        return steps
+    for rule in rules:
+        if rule.urgency in (NotificationRule.Urgency.ANY, incident.urgency):
+            steps.append(Step(rule.channel, rule.position, rule.delay_minutes))
+    return steps
+
+
+def page_key(incident_id: int, level: int, loop: int, user_id: int, seq: int | None) -> str:
+    key = f"incident:{incident_id}:level:{level}:loop:{loop}:user:{user_id}"
+    return f"{key}:seq:{seq}" if seq is not None else key
+
+
 def page(
     incident: Incident,
     users: Iterable[User],
@@ -46,46 +96,107 @@ def page(
     level: int,
     loop: int,
     seq: int | None = None,
+    now: datetime | None = None,
 ) -> list[Notification]:
     """Create (at most once per idempotency key) and dispatch notifications.
 
     Re-running with the same (incident, level, loop, seq) is a no-op: the unique key makes
-    the second `get_or_create` find the first row instead of paging again.
+    the second `get_or_create` find the first row instead of paging again, and `page_key`
+    makes the person's rules apply exactly once even if they edit them in between.
     """
     if incident.is_maintenance:
         return []  # I13: maintenance incidents never page, whatever a human clicks
+    now = now or timezone.now()
     dry_run = incident.service.mode == Service.Mode.DEBUG
     created: list[Notification] = []
     for user in users:
-        for channel in PAGE_CHANNELS:
-            notification, was_created = Notification.objects.get_or_create(
-                idempotency_key=idempotency_key(incident.pk, level, loop, user.pk, channel, seq),
-                defaults={
-                    "incident": incident,
-                    "user": user,
-                    "channel": channel,
-                    "status": Notification.Status.DRY_RUN
-                    if dry_run
-                    else Notification.Status.PENDING,
-                },
+        key_prefix = page_key(incident.pk, level, loop, user.pk, seq)
+        if Notification.objects.filter(incident=incident, page_key=key_prefix).exists():
+            continue  # this page already happened; do not re-read the rules
+        contact = UserContact.objects.filter(user=user).first()
+        for step in steps_for(user, incident):
+            notification, was_created = _create(
+                incident, user, step, contact, level, loop, seq, key_prefix, now, dry_run
             )
-            if not was_created:
-                continue
-            created.append(notification)
-            if dry_run:
-                record(
-                    incident,
-                    EventType.NOTIFIED,
-                    user_id=user.pk,
-                    channel=channel,
-                    dry_run=True,
-                    message=f"Dry run: would notify {user} via {channel}",
-                )
-            else:
-                from .tasks import deliver_notification
-
-                dispatch.on_commit(deliver_notification, notification.pk)
+            if was_created:
+                created.append(notification)
     return created
+
+
+def _destination(channel: str, user: User, contact: UserContact | None) -> str:
+    if channel == Notification.Channel.EMAIL:
+        return user.email
+    if channel in (Notification.Channel.SMS, Notification.Channel.VOICE) and contact:
+        return contact.phone_number
+    if channel == Notification.Channel.WEBHOOK and contact and contact.webhook_url:
+        return urlsplit(contact.webhook_url).hostname or ""  # the host only: URLs can be secrets
+    return ""
+
+
+def _create(
+    incident: Incident,
+    user: User,
+    step: Step,
+    contact: UserContact | None,
+    level: int,
+    loop: int,
+    seq: int | None,
+    key_prefix: str,
+    now: datetime,
+    dry_run: bool,
+) -> tuple[Notification, bool]:
+    key = idempotency_key(incident.pk, level, loop, user.pk, step.channel, seq)
+    if step.position is not None:
+        key += f":step:{step.position}"
+    reason = None if dry_run else unavailable_reason(step.channel, contact)
+    if dry_run:
+        status = Notification.Status.DRY_RUN
+    elif reason:
+        status = Notification.Status.FAILED
+    else:
+        status = Notification.Status.PENDING
+    delayed = step.delay_minutes > 0 and status == Notification.Status.PENDING
+    not_before = now + timedelta(minutes=step.delay_minutes) if delayed else None
+    notification, was_created = Notification.objects.get_or_create(
+        idempotency_key=key,
+        defaults={
+            "incident": incident,
+            "user": user,
+            "channel": step.channel,
+            "status": status,
+            "page_key": key_prefix,
+            "not_before": not_before,
+            "destination": _destination(step.channel, user, contact),
+            "rule_snapshot": step.snapshot,
+            "last_error": reason or "",
+        },
+    )
+    if not was_created:
+        return notification, False
+    if dry_run:
+        record(
+            incident,
+            EventType.NOTIFIED,
+            user_id=user.pk,
+            channel=step.channel,
+            dry_run=True,
+            message=f"Dry run: would notify {user} via {step.channel}",
+        )
+    elif reason:
+        # Said out loud, now, rather than discovered after a delay: this page cannot reach them.
+        record(
+            incident,
+            EventType.NOTIFICATION_FAILED,
+            user_id=user.pk,
+            channel=step.channel,
+            attempts=0,
+            message=f"Could not notify {user} via {step.channel}: {reason}",
+        )
+    else:
+        from .tasks import deliver_notification
+
+        dispatch.on_commit(deliver_notification, notification.pk, eta=not_before)
+    return notification, True
 
 
 def deliver(notification_id: int, *, now: datetime | None = None) -> Notification | None:
@@ -150,6 +261,18 @@ def _claim(notification_id: int, now: datetime) -> tuple[Notification | None, bo
             notification.status = Notification.Status.DRY_RUN
             notification.save(update_fields=["status", "updated_at"])
             return notification, False
+        if notification.not_before is not None:
+            if incident.status != Status.TRIGGERED:
+                # I18: a later step of a personal plan exists to chase an *unanswered* page. Once
+                # anyone acknowledges, it must not wake the person up.
+                notification.status = Notification.Status.CANCELLED
+                notification.save(update_fields=["status", "updated_at"])
+                return notification, False
+            if now < notification.not_before:
+                return (
+                    notification,
+                    False,
+                )  # I19: never before its time (an early or duplicate task)
         if notification.claimed_at and now - notification.claimed_at < CLAIM_TTL:
             return notification, False  # another worker is sending it right now
         if notification.attempts >= MAX_ATTEMPTS:
@@ -182,6 +305,10 @@ def _settle(notification_id: int, error: Exception | None, now: datetime) -> Not
                 channel=notification.channel,
                 message=(f"Notified {notification.user} via {notification.get_channel_display()}"),
             )
+            return notification
+        if isinstance(error, PermanentChannelError):
+            notification.last_error = str(error)[:2000]
+            _fail(notification, notification.last_error)
             return notification
         if isinstance(error, ChannelError):
             notification.last_error = str(error)[:2000]
@@ -220,6 +347,7 @@ def redispatch_stuck(*, now: datetime | None = None, limit: int = 500) -> int:
     now = now or timezone.now()
     ids = list(
         Notification.objects.filter(
+            Q(not_before__isnull=True) | Q(not_before__lte=now),  # a future step is not stuck
             status=Notification.Status.PENDING,
             attempts__lt=MAX_ATTEMPTS,
             updated_at__lt=now - STUCK_AFTER,
@@ -247,3 +375,57 @@ def mark_all_read(user: User, *, now: datetime | None = None) -> int:
     return Notification.objects.filter(user=user, read_at__isnull=True).update(
         read_at=now or timezone.now()
     )
+
+
+# Carrier/provider states, ranked so a late or replayed callback can never move a row backwards.
+_PROVIDER_RANK = {
+    "accepted": 0, "queued": 0, "scheduled": 0,
+    "sending": 1,
+    "sent": 2, "ringing": 2,
+    "in-progress": 3, "receiving": 3,
+    "delivered": 4, "read": 4, "completed": 4,
+    "failed": 5, "undelivered": 5, "busy": 5, "no-answer": 5, "canceled": 5,
+}  # fmt: skip
+_PROVIDER_FAILURES = {"failed", "undelivered", "busy", "no-answer", "canceled"}
+
+
+def apply_provider_status(
+    provider_id: str, state: str, *, now: datetime | None = None
+) -> Notification | None:
+    """Record a delivery receipt. Idempotent and monotonic: replays and out-of-order callbacks
+    (Twilio does not guarantee order) change nothing."""
+    rank = _PROVIDER_RANK.get(state)
+    if rank is None:
+        return None
+    now = now or timezone.now()
+    with transaction.atomic():
+        notification = (
+            Notification.objects.select_for_update(of=("self",))
+            .select_related("incident", "user")
+            .filter(provider_id=provider_id)
+            .first()
+        )
+        if notification is None:
+            return None  # a receipt for something we never sent (or already purged)
+        current = _PROVIDER_RANK.get(notification.provider_status, -1)
+        if rank <= current:
+            return notification
+        notification.provider_status = state
+        fields = ["provider_status", "updated_at"]
+        if state in ("delivered", "completed") and notification.delivered_at is None:
+            notification.delivered_at = now
+            fields.append("delivered_at")
+        notification.save(update_fields=fields)
+        if state in _PROVIDER_FAILURES:
+            record(
+                notification.incident,
+                EventType.NOTIFICATION_FAILED,
+                user_id=notification.user_id,
+                channel=notification.channel,
+                attempts=notification.attempts,
+                message=(
+                    f"The carrier reported {state} for {notification.user} via "
+                    f"{notification.get_channel_display()}"
+                ),
+            )
+        return notification

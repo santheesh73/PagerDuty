@@ -120,7 +120,7 @@ Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing mo
 | **Incidents** | One transition table incl. **unacknowledge**, assign/reassign, notes, manual escalate, full timeline, filters and search |
 | **Escalation policies** | Ordered levels, per-level delay, user or schedule targets, 0–3 loops, policy snapshot frozen at open |
 | **On-call schedules** | Daily / weekly / custom layers, local handoff time, IANA zone, layer priority, overrides, "who's on call now", rendered shift timeline |
-| **Notifications** | In-app inbox + email behind a `Channel` protocol, retries with backoff, idempotency keys, dry-run in debug mode |
+| **Notifications** | In-app inbox, email, SMS and voice (Twilio, opt-in) and signed webhooks (Slack/Teams-compatible, SSRF-guarded); personal notification rules with delayed steps; signed one-time acknowledge/resolve links; retries, idempotency keys, dry-run in debug mode. SMS/voice are verified against a fake Twilio, **not a live carrier** ([CHANNELS.md](docs/CHANNELS.md)) |
 | **Analytics** | **Time to first response** (headline), MTTA, MTTR, daily volume, noisiest services, escalation rate |
 
 ## Measured
@@ -171,11 +171,10 @@ Deliberately out of scope, so the core loop could go deep:
 
 - automated workflows and runbooks;
 - public status pages;
-- SMS, phone and push (the `Channel` protocol makes each a one-class addition);
+- browser push (SMS, voice and webhooks exist; see [CHANNELS.md](docs/CHANNELS.md));
 - time-of-day restrictions on schedule layers;
 - multi-org tenancy (one org, many teams);
-- user-written routing or grouping rules;
-- personal notification rules (every page goes to in-app + email).
+- user-written routing or grouping rules.
 
 ## License
 

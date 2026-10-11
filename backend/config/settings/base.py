@@ -169,6 +169,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
         "events": os.environ.get("THROTTLE_EVENTS", "120/min"),
+        "phone_code": os.environ.get("THROTTLE_PHONE_CODE", "5/hour"),
     },
 }
 
@@ -188,6 +189,9 @@ SPECTACULAR_SETTINGS = {
         "AlertStatusEnum": "apps.alerting.models.Alert.Status",
         "NotificationStatusEnum": "apps.notifications.models.Notification.Status",
         "ServiceModeEnum": "apps.catalog.models.Service.Mode",
+        "UrgencyEnum": "apps.incidents.models.Urgency",
+        "ChannelEnum": "apps.notifications.models.Notification.Channel",
+        "RuleUrgencyEnum": "apps.notifications.models.NotificationRule.Urgency",
     },
 }
 
@@ -303,6 +307,24 @@ LOGGING = {
 # Delete resolved incidents (and their alerts, timeline, notifications) older than this many
 # days. 0 = keep everything, which is the default. See docs/DATA_SAFETY.md.
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "0"))
+
+# --- Notification channels -----------------------------------------------------------------
+# Everything is off until configured; an unconfigured channel fails its notifications
+# immediately and visibly rather than retrying (docs/CHANNELS.md).
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER", "")
+TWILIO_API_BASE = os.environ.get("TWILIO_API_BASE", "https://api.twilio.com")
+# The public origin Twilio and recipients reach us on. Twilio's request signature covers the exact
+# URL it called, so this must match what is configured there, not an internal address.
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL") or os.environ.get(
+    "FRONTEND_URL", "http://localhost:5173"
+)
+# One-click acknowledge/resolve links in pages. Short-lived and single-use.
+ACTION_LINK_TTL_HOURS = int(os.environ.get("ACTION_LINK_TTL_HOURS", "12"))
+# Webhook destinations are user-supplied URLs, so private/loopback addresses are refused
+# (SSRF). Only the test suite turns this on, to talk to a local fake receiver.
+WEBHOOK_ALLOW_PRIVATE = False
 
 # --- Observability ---------------------------------------------------------
 # Everything here is off unless configured; see docs/OBSERVABILITY.md.
