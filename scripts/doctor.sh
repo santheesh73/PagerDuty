@@ -22,6 +22,7 @@ fi
 LOGS=${DOCTOR_LOGS:-doctor-logs.txt}
 status=1
 
+# shellcheck disable=SC2317,SC2329  # called by the EXIT trap, which shellcheck cannot see
 cleanup() {
   if [ "$status" -ne 0 ]; then
     echo "doctor failed: saving logs to $LOGS"

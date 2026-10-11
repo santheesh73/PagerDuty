@@ -310,7 +310,7 @@ jobs:
         run: SECRET_KEY=x TICK_SECRET=t docker compose -f docker-compose.demo.yml config -q
       - name: Shell scripts pass shellcheck
         run: |
-          shellcheck -e SC2329 scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
+          shellcheck scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
             scripts/install-trivy.sh
 
   backup-drill:
