@@ -18,6 +18,7 @@ Rotation model
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -25,6 +26,8 @@ from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from .models import Rotation
+
+logger = logging.getLogger(__name__)
 
 OVERRIDE_SOURCE = "override"
 
@@ -121,7 +124,15 @@ def on_call_with_source(schedule: ScheduleSpec, at: datetime) -> tuple[int | Non
     if covering:
         return max(covering, key=lambda o: o.seq).user_id, OVERRIDE_SOURCE
     for layer in sorted(schedule.layers, key=lambda lay: lay.priority, reverse=True):
-        user_id = layer_user_at(layer, at)
+        try:
+            user_id = layer_user_at(layer, at)
+        except OverflowError:
+            # A layer whose dates the calendar cannot reach (the API and database now refuse to
+            # store one) must not take paging down: skip it, and say so.
+            logger.error(
+                "skipping on-call layer with out-of-range dates", extra={"layer": layer.name}
+            )
+            continue
         if user_id is not None:
             return user_id, layer.name
     return None, None
@@ -138,7 +149,12 @@ def render_shifts(schedule: ScheduleSpec, since: datetime, until: datetime) -> l
         return []
     points = {since, until}
     for layer in schedule.layers:
-        points.update(_layer_boundaries(layer, since, until))
+        try:
+            points.update(_layer_boundaries(layer, since, until))
+        except OverflowError:
+            logger.error(
+                "skipping on-call layer with out-of-range dates", extra={"layer": layer.name}
+            )
     for override in schedule.overrides:
         points.update(p for p in (override.start, override.end) if since < p < until)
     ordered = sorted(points)

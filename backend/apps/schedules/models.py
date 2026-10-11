@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -25,6 +25,12 @@ class Schedule(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+# A rotation can only be evaluated for dates the calendar arithmetic can reach. A start in year 1
+# made every on-call lookup raise OverflowError, which also failed Events ingest for the service.
+LAYER_START_MIN = datetime(2000, 1, 1, tzinfo=UTC)
+LAYER_START_MAX = datetime(2100, 1, 1, tzinfo=UTC)
 
 
 class ScheduleLayer(TimeStampedModel):
@@ -59,6 +65,10 @@ class ScheduleLayer(TimeStampedModel):
                 condition=models.Q(turn_length__isnull=True)
                 | models.Q(turn_length__gt=timedelta(0)),
                 name="layer_turn_length_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start__gte=LAYER_START_MIN, start__lt=LAYER_START_MAX),
+                name="layer_start_in_range",
             ),
         ]
 

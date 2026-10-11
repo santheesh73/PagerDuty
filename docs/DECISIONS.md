@@ -357,3 +357,27 @@ audit had flagged the same variable. pytest now pins the module with `--ds`.
 `backend/.dockerignore` now excludes `.env*`, `*.rdb` and `.git`; the SPA is served with `nosniff`,
 `X-Frame-Options` and `Referrer-Policy`; the throttle's fail-open path logs one line instead of a 40-line
 traceback per request; the prod compose no longer seeds demo data or prints demo logins by default.
+
+---
+
+## What the carry-over audit found (production-readiness, phase 0)
+
+The independent audit's open findings were re-tested against `main`. Each fix has a test that failed
+before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line mutations, all caught).
+
+- **Tenant scoping was correct but unprotected.** Removing team scoping from the services, policies,
+  schedules, on-call, timeline and notification lists failed no test. `core/tests/test_tenant_matrix.py`
+  now enumerates every route from the URL resolver; the mutation check confirms each scoping line is caught.
+- **A layer starting in year 1** was accepted by the API and crashed `/oncall/` and ingest (`OverflowError`).
+  Now refused by the API and a `CHECK`, and the resolver skips a layer it cannot evaluate instead of failing.
+- **Deleting a schedule or user named only by an open incident's frozen policy** succeeded and left the
+  incident escalating to nobody. Now refused (409 `in_use`) while any open incident names it. My first version also guarded queryset and cascade deletes with a `pre_delete` signal and broke the nightly demo reseed (a team wipe removes its incidents in the same cascade), which the existing seed test caught; the guard now covers direct deletes only.
+- **Two N+1 endpoints** (schedules list: 8 queries for 1 row, 44 for 13; `/oncalls/`: 11 vs 23) are flat.
+- **Alert dropped under sustained churn**: 6 to 7 `ingest_conflict` per run with 8 looping triggers against
+  8 looping resolvers. Root cause: a loser of the open race re-read, found nothing open and lost again. A
+  per-key advisory lock now serialises open-or-attach; none dropped in repeated runs.
+- **Not a bug, but untested**: inactive users are never paged; tasks are enqueued only after commit; the
+  incident row lock, the ingest locks and the delivery claim lock. Each now has a test that fails when the
+  guard is removed.
+- **Method note**: the first mutation run reported a malformed mutation as "caught" because any non-zero
+  exit counted. The harness now counts only a real test failure.
