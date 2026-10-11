@@ -104,3 +104,48 @@ jobs:
           push: false
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  e2e:
+    name: E2E + load smoke (Docker stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: ci-only-not-a-secret
+      # The default 120/min per-key limit protects production; the smoke run needs headroom.
+      THROTTLE_EVENTS: 100000/min
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Start the production-like stack
+        run: docker compose -f docker-compose.prod.yml up --build -d --wait --wait-timeout 300
+      - name: Load smoke (k6) and database invariants
+        run: |
+          KEY=$(docker compose -f docker-compose.prod.yml exec -T api python manage.py routing_key checkout-api | tail -1)
+          RUN=ci$GITHUB_RUN_ID
+          mkdir -p k6out && chmod 777 k6out
+          docker run --rm --network host -v "$PWD/loadtest:/loadtest:ro" -v "$PWD/k6out:/out" \
+            grafana/k6:2.3.0 run --quiet -e BASE_URL=http://localhost:8080 -e ROUTING_KEY="$KEY" \
+            -e RUN_ID="$RUN" -e DURATION=15s -e VUS=8 /loadtest/events.js
+          NEW=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_new_keys']['values']['count'])")
+          HOT=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])")
+          docker compose -f docker-compose.prod.yml exec -T api python - --run-id "$RUN" --new-keys "$NEW" --hot-requests "$HOT" < loadtest/verify.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Browser journey (Playwright)
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: e2e/test-results
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --tail 200
