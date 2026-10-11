@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from apps.catalog.models import Service
 from apps.core.errors import Conflict, InvalidTransition
+from apps.core.locks import advisory_xact_lock
 from apps.core.text import one_line
 from apps.incidents import actions as incident_actions
 from apps.incidents.models import Incident, Status, Urgency
@@ -73,6 +74,11 @@ def _trigger(service: Service, event: Event, now: datetime) -> IngestResult:
     for attempt in (1, 2):
         try:
             with transaction.atomic():
+                # Serialise open-or-attach per key. Without it, a loser re-reads, finds nothing
+                # open (the winner was resolved meanwhile), inserts, and loses again; under
+                # sustained churn two attempts were not enough and the alert was dropped (409).
+                # The unique index below stays as the backstop.
+                advisory_xact_lock("incident-key", service.pk, incident_key)
                 incident = (
                     Incident.objects.select_for_update(of=("self",))
                     .filter(service=service, dedup_key=incident_key)

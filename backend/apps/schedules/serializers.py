@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.db import transaction
@@ -8,7 +8,15 @@ from apps.accounts.models import Membership, Team
 from apps.accounts.serializers import UserSummarySerializer
 from apps.core import limits
 
-from .models import LayerMember, Rotation, Schedule, ScheduleLayer, ScheduleOverride
+from .models import (
+    LAYER_START_MAX,
+    LAYER_START_MIN,
+    LayerMember,
+    Rotation,
+    Schedule,
+    ScheduleLayer,
+    ScheduleOverride,
+)
 
 
 class LayerSerializer(serializers.ModelSerializer):
@@ -56,6 +64,13 @@ class LayerSerializer(serializers.ModelSerializer):
             "members": [u.pk for u in members],
             "member_details": UserSummarySerializer(members, many=True).data,
         }
+
+    def validate_start(self, value: datetime) -> datetime:
+        if not LAYER_START_MIN <= value < LAYER_START_MAX:
+            raise serializers.ValidationError(
+                f"Start must be between {LAYER_START_MIN:%Y-%m-%d} and {LAYER_START_MAX:%Y-%m-%d}."
+            )
+        return value
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         limits.enforce("members_per_layer", len(attrs.get("members", [])))
