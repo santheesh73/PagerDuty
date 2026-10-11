@@ -163,6 +163,14 @@ class Doctor:
         check("readiness /readyz checks database and redis", ok, json.dumps(body))
         status, body = anon.call("GET", "/")
         check("SPA is served", status == 200 and 'id="root"' in str(body), f"{status}")
+        with urllib.request.urlopen(self.a.base + "/", timeout=10) as resp:
+            hdr = {k.lower(): v for k, v in resp.headers.items()}
+        check(
+            "SPA is served with nosniff, frame and referrer headers",
+            hdr.get("x-content-type-options") == "nosniff"
+            and hdr.get("x-frame-options") == "DENY"
+            and "referrer-policy" in hdr,
+        )
         status, _ = anon.call("GET", "/api/v1/incidents/")
         check("API is reachable through the proxy and refuses anonymous callers", status == 403)
 

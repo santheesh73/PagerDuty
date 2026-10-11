@@ -114,7 +114,7 @@ schema: ## Regenerate OpenAPI schema and the frontend's TS types
 	$(FRONTEND) npm run gen:api
 
 loadtest: ## k6 against the prod-like stack (VUS=32 DURATION=60s); then verify the database
-	@set -e; export SECRET_KEY=$${SECRET_KEY:-loadtest} THROTTLE_EVENTS=$${THROTTLE_EVENTS:-100000/min}; \
+	@set -e; export SECRET_KEY=$${SECRET_KEY:-loadtest} THROTTLE_EVENTS=$${THROTTLE_EVENTS:-100000/min} SEED_DEMO=1; \
 	dc="$${COMPOSE:-docker compose -f docker-compose.prod.yml}"; $$dc up --build -d --wait --wait-timeout 300; \
 	key=$$($$dc exec -T api python manage.py routing_key checkout-api | tail -1); run=load$$$$; \
 	mkdir -p loadtest/out; chmod 777 loadtest/out; \
