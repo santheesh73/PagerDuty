@@ -21,11 +21,12 @@ SERVICE ?= checkout-api
 ROUTING_KEY ?=
 
 
-.PHONY: help up down logs ps seed reseed send-alert chaos-redis badge simulate loadtest e2e test test-backend test-frontend \
+.PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor db-backup db-restore \
+        badge simulate loadtest e2e test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .env:
 	cp .env.example .env
@@ -44,6 +45,9 @@ logs: ## Tail logs from every service
 ps: ## Show service status
 	$(COMPOSE) ps
 
+migrate: ## Apply database migrations (also runs on every API start)
+	$(BACKEND) python manage.py migrate --noinput
+
 seed: ## Seed demo data (idempotent)
 	$(BACKEND) python manage.py seed_demo
 
@@ -60,6 +64,18 @@ send-alert: ## Fire a live trigger at a seeded service (SERVICE=checkout-api)
 
 chaos-redis: ## Prove a Redis wipe can't lose a page (needs `make up`)
 	COMPOSE="$(COMPOSE)" ./scripts/chaos_redis.sh
+
+doctor: ## Boot the prod-like stack from scratch and prove it works and survives failures (~8 min)
+	./scripts/doctor.sh
+
+db-backup: ## Dump the database to backups/pulse-<timestamp>.dump (custom format)
+	@mkdir -p backups
+	@f=backups/pulse-$$(date +%Y%m%d-%H%M%S).dump; \
+	$(COMPOSE) exec -T db pg_dump -U $${POSTGRES_USER:-pulse} -Fc $${POSTGRES_DB:-pulse} > $$f && echo "wrote $$f ($$(wc -c < $$f) bytes)"
+
+db-restore: ## Restore a dump over the database: make db-restore FILE=backups/pulse-....dump
+	@test -n "$(FILE)" || { echo "usage: make db-restore FILE=backups/pulse-....dump"; exit 1; }
+	$(COMPOSE) exec -T db pg_restore -U $${POSTGRES_USER:-pulse} -d $${POSTGRES_DB:-pulse} --clean --if-exists --no-owner < $(FILE)
 
 test-backend: ## Backend tests with coverage (fails under 85%)
 	$(BACKEND) pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=85
