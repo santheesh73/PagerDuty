@@ -135,3 +135,12 @@ def test_the_email_subject_is_one_line_even_for_a_title_stored_before_the_fix(
     row = email_row(open_incident)
     assert deliver(row.pk).status == Notification.Status.SENT
     assert mail.outbox[0].subject == f"[Pulse] #{open_incident.number} Legacy title with gaps"
+
+
+def test_a_lost_deliver_message_is_redriven_within_three_minutes() -> None:
+    """Worst case = a sweep that just missed the row + the sweep interval after STUCK_AFTER."""
+    from django.conf import settings
+
+    sweep = settings.CELERY_BEAT_SCHEDULE["sweep-stuck-notifications"]["schedule"]
+    assert actions.STUCK_AFTER + sweep <= timedelta(minutes=3)
+    assert actions.CLAIM_TTL < actions.STUCK_AFTER  # a dead sender's claim has lapsed by then

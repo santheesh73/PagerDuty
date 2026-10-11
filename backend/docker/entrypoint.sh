@@ -19,8 +19,10 @@ case "$role" in
       --access-logfile - "$@"
     ;;
   worker)
-    # escalations is listed first: the worker drains it before anything else.
-    exec celery -A config worker -Q escalations,notifications,default \
+    # -Q order is NOT a priority (kombu's Redis transport round-robins its queues), so
+    # paging is only isolated from notification backlogs by running a worker that consumes
+    # nothing else: CELERY_QUEUES=escalations. One process serving all three is the default.
+    exec celery -A config worker -Q "${CELERY_QUEUES:-escalations,notifications,default}" \
       --concurrency "${CELERY_CONCURRENCY:-4}" --loglevel INFO "$@"
     ;;
   beat)

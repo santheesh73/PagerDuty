@@ -25,7 +25,7 @@ from .models import Notification
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
-STUCK_AFTER = timedelta(minutes=2)
+STUCK_AFTER = timedelta(seconds=90)
 # How long a worker may hold a notification while sending before another may take over.
 # Must stay above EMAIL_TIMEOUT and below STUCK_AFTER, so a dead worker's page is retried by
 # the next sweep.

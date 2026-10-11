@@ -188,7 +188,9 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     },
     "sweep-stuck-notifications": {
         "task": "apps.notifications.tasks.sweep_stuck_notifications",
-        "schedule": timedelta(minutes=5),
+        # With STUCK_AFTER (90 s) this bounds how late a page can be when its delivery message
+        # was lost (Redis down or wiped) to about 2.5 minutes.
+        "schedule": timedelta(seconds=60),
     },
 }
 
