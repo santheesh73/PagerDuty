@@ -206,3 +206,36 @@ peer ranges); React Router 7 (v8 exists; v7 meets the floor with a stable API).
 `Incident.number` uses a Postgres sequence (`db_default=nextval(...)`), so numbers are
 human-friendly and race-free without a counter row lock. Like any sequence it can skip
 numbers after a rollback; that's acceptable for an identifier.
+
+---
+
+## What the property tests found
+
+Phase 2 of the hardening work (see [`INVARIANTS.md`](INVARIANTS.md)) replaced hand-picked
+on-call cases with generated ones. Each defect below has a focused regression test that
+fails against the old code (verified by restoring the old file and re-running it).
+
+### F1. The pager went back to yesterday's responder during a fall-back hour
+
+**Found by** `test_daily_and_weekly_handoffs_land_on_the_local_handoff_time_across_dst`,
+falsifying example: New York, daily rotation, handoff 01:30, 2025-11-02.
+
+**Cause.** `_shift_day` compared wall-clock times. After a fall-back, 01:00–02:00 happens
+twice; the second 01:15 reads earlier than a 01:30 handoff even though it is 45 minutes
+after it, so the resolver assigned the previous shift day for the repeated half hour.
+`render_shifts` placed the boundary correctly, so the timeline and the escalation engine
+disagreed for 30 minutes a year, and the engine would have paged the wrong person.
+
+**Fix.** The shift day is now *the latest day whose handoff instant is at or before `at`*,
+comparing instants only. The DST-gap search no longer depends on `_shift_day`.
+
+**Why the example tests missed it.** They covered fall-back with a 09:00 handoff, which is
+nowhere near the repeated hour. The property generator weights handoffs towards
+01:00–03:00 and probes every 5 minutes around each transition.
+
+### F2. Zero-length custom turns could reach the resolver
+
+**Found by** the adversarial review of I2. Only the API's `turn_length_hours >= 1` rejected
+them; the database constraint checked only `NOT NULL`, so the admin could save a zero or
+negative turn and every `on_call` for that schedule would raise. A `CHECK
+(turn_length > 0)` constraint (`layer_turn_length_positive`) now refuses it.
