@@ -164,7 +164,7 @@ def escalate(
                 loop=new_loop,
                 message=f"Nobody on call at level {new_level + 1}; moving on",
             )
-        page(incident, responders, level=new_level, loop=new_loop)
+        page(incident, responders, level=new_level, loop=new_loop, now=now)
         schedule_eta(incident, now)
         logger.info(
             "incident escalated",

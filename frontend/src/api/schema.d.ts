@@ -316,6 +316,128 @@ export interface paths {
     patch: operations["me_partial_update"];
     trace?: never;
   };
+  "/api/v1/me/contact/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The signed-in user's phone number and webhook. Always their own: there is no user id. */
+    get: operations["me_contact_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description The signed-in user's phone number and webhook. Always their own: there is no user id. */
+    patch: operations["me_contact_partial_update"];
+    trace?: never;
+  };
+  "/api/v1/me/contact/phone/send-code/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_contact_phone_send_code_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/contact/phone/verify/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_contact_phone_verify_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/contact/webhook/rotate-secret/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_contact_webhook_rotate_secret_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/notification-rules/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    get: operations["me_notification_rules_list"];
+    put?: never;
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    post: operations["me_notification_rules_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/notification-rules/{id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    get: operations["me_notification_rules_retrieve"];
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    put: operations["me_notification_rules_update"];
+    post?: never;
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    delete: operations["me_notification_rules_destroy"];
+    options?: never;
+    head?: never;
+    /**
+     * @description Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+     *     because there is nothing shared: every row belongs to the caller or does not exist.
+     */
+    patch: operations["me_notification_rules_partial_update"];
+    trace?: never;
+  };
   "/api/v1/notifications/": {
     parameters: {
       query?: never;
@@ -691,9 +813,41 @@ export interface components {
     /**
      * @description * `in_app` - In-app
      *     * `email` - Email
+     *     * `sms` - SMS
+     *     * `voice` - Voice call
+     *     * `webhook` - Webhook
      * @enum {string}
      */
-    ChannelEnum: "in_app" | "email";
+    ChannelEnum: "in_app" | "email" | "sms" | "voice" | "webhook";
+    CodeRequest: {
+      code: string;
+    };
+    /**
+     * @description What the API says about a person's contact details. Secrets are write-only: the webhook
+     *     URL (often itself a secret) is reduced to its host, and the signing key is never returned
+     *     here (only once, when it is created).
+     */
+    Contact: {
+      phone_number: string;
+      phone_verified: boolean;
+      webhook_host: string;
+      has_webhook: boolean;
+      sms_voice_available: boolean;
+    };
+    /**
+     * @description What the API says about a person's contact details. Secrets are write-only: the webhook
+     *     URL (often itself a secret) is reduced to its host, and the signing key is never returned
+     *     here (only once, when it is created).
+     */
+    ContactUpdateResponse: {
+      phone_number: string;
+      phone_verified: boolean;
+      webhook_host: string;
+      has_webhook: boolean;
+      sms_voice_available: boolean;
+      /** @description Shown once, when a webhook URL is set or rotated. */
+      webhook_secret: string;
+    };
     Count: {
       count: number;
     };
@@ -950,6 +1104,28 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
+    NotificationRule: {
+      readonly id: number;
+      readonly position: number;
+      channel: components["schemas"]["NotificationRuleChannelEnum"];
+      delay_minutes: number;
+      urgency: components["schemas"]["RuleUrgencyEnum"];
+      enabled: boolean;
+    };
+    /**
+     * @description * `email` - Email
+     *     * `sms` - SMS
+     *     * `voice` - Voice call
+     *     * `webhook` - Webhook
+     * @enum {string}
+     */
+    NotificationRuleChannelEnum: "email" | "sms" | "voice" | "webhook";
+    NotificationRuleRequest: {
+      channel: components["schemas"]["NotificationRuleChannelEnum"];
+      delay_minutes?: number;
+      urgency?: components["schemas"]["RuleUrgencyEnum"];
+      enabled?: boolean;
+    };
     /**
      * @description * `pending` - Pending
      *     * `sent` - Sent
@@ -1099,6 +1275,10 @@ export interface components {
       previous: string | null;
       results: components["schemas"]["Service"][];
     };
+    PatchedContactUpdateRequest: {
+      phone_number?: string;
+      webhook_url?: string;
+    };
     /** @description A policy and its ordered levels. Writes replace `rules` wholesale, atomically. */
     PatchedEscalationPolicyRequest: {
       team?: number;
@@ -1109,6 +1289,12 @@ export interface components {
     PatchedMeRequest: {
       name?: string;
       timezone?: string;
+    };
+    PatchedNotificationRuleRequest: {
+      channel?: components["schemas"]["NotificationRuleChannelEnum"];
+      delay_minutes?: number;
+      urgency?: components["schemas"]["RuleUrgencyEnum"];
+      enabled?: boolean;
     };
     PatchedOverrideRequest: {
       user?: number;
@@ -1165,6 +1351,13 @@ export interface components {
       delay_minutes: number;
       targets: components["schemas"]["TargetRequest"][];
     };
+    /**
+     * @description * `any` - Any urgency
+     *     * `high` - High urgency only
+     *     * `low` - Low urgency only
+     * @enum {string}
+     */
+    RuleUrgencyEnum: "any" | "high" | "low";
     /** @description Writes replace `layers` wholesale. Layer order is priority: the first layer wins. */
     Schedule: {
       readonly id: number;
@@ -1187,6 +1380,9 @@ export interface components {
       name: string;
       timezone?: string;
       layers: components["schemas"]["LayerRequest"][];
+    };
+    SecretResponse: {
+      webhook_secret: string;
     };
     Service: {
       readonly id: number;
@@ -1906,6 +2102,255 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Me"];
+        };
+      };
+    };
+  };
+  me_contact_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Contact"];
+        };
+      };
+    };
+  };
+  me_contact_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["PatchedContactUpdateRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["PatchedContactUpdateRequest"];
+        "multipart/form-data": components["schemas"]["PatchedContactUpdateRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ContactUpdateResponse"];
+        };
+      };
+    };
+  };
+  me_contact_phone_send_code_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_contact_phone_verify_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CodeRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["CodeRequest"];
+        "multipart/form-data": components["schemas"]["CodeRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Contact"];
+        };
+      };
+    };
+  };
+  me_contact_webhook_rotate_secret_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SecretResponse"];
+        };
+      };
+    };
+  };
+  me_notification_rules_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationRule"][];
+        };
+      };
+    };
+  };
+  me_notification_rules_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NotificationRuleRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["NotificationRuleRequest"];
+        "multipart/form-data": components["schemas"]["NotificationRuleRequest"];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationRule"];
+        };
+      };
+    };
+  };
+  me_notification_rules_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this notification rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationRule"];
+        };
+      };
+    };
+  };
+  me_notification_rules_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this notification rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NotificationRuleRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["NotificationRuleRequest"];
+        "multipart/form-data": components["schemas"]["NotificationRuleRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationRule"];
+        };
+      };
+    };
+  };
+  me_notification_rules_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this notification rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_notification_rules_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this notification rule. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["PatchedNotificationRuleRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["PatchedNotificationRuleRequest"];
+        "multipart/form-data": components["schemas"]["PatchedNotificationRuleRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationRule"];
         };
       };
     };

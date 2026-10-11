@@ -23,7 +23,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import Membership
 from apps.alerting.models import Alert
 from apps.incidents.models import Incident
-from apps.notifications.models import Notification
+from apps.notifications.models import Notification, NotificationRule
 from apps.schedules.models import ScheduleOverride
 from tests.factories import (
     AlertFactory,
@@ -119,6 +119,7 @@ def world():
         service=service_a, incident=incident_a, summary=f"{MARKER} alert summary"
     )
     note_a = NotificationFactory(incident=incident_a, user=user_a)
+    rule_a = NotificationRule.objects.create(user=user_a, channel="email", position=0)
     # Team B has data of its own so "empty" can't be mistaken for "isolated".
     ServiceFactory(team=team_b, name="b-service")
 
@@ -136,6 +137,7 @@ def world():
             "incident": incident_a.pk,
             "alert": alert_a.pk,
             "notification": note_a.pk,
+            "rule": rule_a.pk,
         },
         "team_a": team_a,
         "service_a": service_a,
@@ -157,6 +159,7 @@ def fill(template: str, ids: dict[str, int]) -> str:
         "schedules": {"pk": ids["schedule"], "schedule_pk": ids["schedule"]},
         "incidents": {"pk": ids["incident"]},
         "notifications": {"pk": ids["notification"]},
+        "me": {"pk": ids["rule"]},  # /me/notification-rules/{pk}/: personal, owned by user A
     }.get(resource)
     if values is None:
         raise AssertionError(f"no cross-team fixture for route {template!r}: classify it")
@@ -210,6 +213,7 @@ def test_every_route_is_classified() -> None:
                 "incident",
                 "alert",
                 "notification",
+                "rule",
             ),
             1,
         )
@@ -224,6 +228,7 @@ def test_every_route_is_classified() -> None:
                 "schedules",
                 "incidents",
                 "notifications",
+                "me",
                 "oncalls",
                 "analytics",
             }, f"unclassified collection route {route.template!r}"

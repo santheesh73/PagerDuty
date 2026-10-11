@@ -668,6 +668,257 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v1/me/contact/:
+    get:
+      operationId: me_contact_retrieve
+      description: 'The signed-in user''s phone number and webhook. Always their own:
+        there is no user id.'
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          description: ''
+    patch:
+      operationId: me_contact_partial_update
+      description: 'The signed-in user''s phone number and webhook. Always their own:
+        there is no user id.'
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedContactUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedContactUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedContactUpdateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactUpdateResponse'
+          description: ''
+  /api/v1/me/contact/phone/send-code/:
+    post:
+      operationId: me_contact_phone_send_code_create
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/me/contact/phone/verify/:
+    post:
+      operationId: me_contact_phone_verify_create
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+          description: ''
+  /api/v1/me/contact/webhook/rotate-secret/:
+    post:
+      operationId: me_contact_webhook_rotate_secret_create
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretResponse'
+          description: ''
+  /api/v1/me/notification-rules/:
+    get:
+      operationId: me_notification_rules_list
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationRule'
+          description: ''
+    post:
+      operationId: me_notification_rules_create
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+          description: ''
+  /api/v1/me/notification-rules/{id}/:
+    get:
+      operationId: me_notification_rules_retrieve
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification rule.
+        required: true
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+          description: ''
+    put:
+      operationId: me_notification_rules_update
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification rule.
+        required: true
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+          description: ''
+    patch:
+      operationId: me_notification_rules_partial_update
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification rule.
+        required: true
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRuleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRuleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNotificationRuleRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+          description: ''
+    delete:
+      operationId: me_notification_rules_destroy
+      description: |-
+        Your own paging plan: "after N minutes, if still unanswered, use X". No team scoping
+        because there is nothing shared: every row belongs to the caller or does not exist.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification rule.
+        required: true
+      tags:
+      - me
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/notifications/:
     get:
       operationId: notifications_list
@@ -1587,10 +1838,75 @@ components:
       enum:
       - in_app
       - email
+      - sms
+      - voice
+      - webhook
       type: string
       description: |-
         * `in_app` - In-app
         * `email` - Email
+        * `sms` - SMS
+        * `voice` - Voice call
+        * `webhook` - Webhook
+    CodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          pattern: ^\d{6}$
+      required:
+      - code
+    Contact:
+      type: object
+      description: |-
+        What the API says about a person's contact details. Secrets are write-only: the webhook
+        URL (often itself a secret) is reduced to its host, and the signing key is never returned
+        here (only once, when it is created).
+      properties:
+        phone_number:
+          type: string
+        phone_verified:
+          type: boolean
+        webhook_host:
+          type: string
+        has_webhook:
+          type: boolean
+        sms_voice_available:
+          type: boolean
+      required:
+      - has_webhook
+      - phone_number
+      - phone_verified
+      - sms_voice_available
+      - webhook_host
+    ContactUpdateResponse:
+      type: object
+      description: |-
+        What the API says about a person's contact details. Secrets are write-only: the webhook
+        URL (often itself a secret) is reduced to its host, and the signing key is never returned
+        here (only once, when it is created).
+      properties:
+        phone_number:
+          type: string
+        phone_verified:
+          type: boolean
+        webhook_host:
+          type: string
+        has_webhook:
+          type: boolean
+        sms_voice_available:
+          type: boolean
+        webhook_secret:
+          type: string
+          description: Shown once, when a webhook URL is set or rotated.
+      required:
+      - has_webhook
+      - phone_number
+      - phone_verified
+      - sms_voice_available
+      - webhook_host
+      - webhook_secret
     Count:
       type: object
       properties:
@@ -2284,6 +2600,59 @@ components:
       - read_at
       - sent_at
       - status
+    NotificationRule:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        position:
+          type: integer
+          readOnly: true
+        channel:
+          $ref: '#/components/schemas/NotificationRuleChannelEnum'
+        delay_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 0
+        urgency:
+          $ref: '#/components/schemas/RuleUrgencyEnum'
+        enabled:
+          type: boolean
+      required:
+      - channel
+      - delay_minutes
+      - enabled
+      - id
+      - position
+      - urgency
+    NotificationRuleChannelEnum:
+      enum:
+      - email
+      - sms
+      - voice
+      - webhook
+      type: string
+      description: |-
+        * `email` - Email
+        * `sms` - SMS
+        * `voice` - Voice call
+        * `webhook` - Webhook
+    NotificationRuleRequest:
+      type: object
+      properties:
+        channel:
+          $ref: '#/components/schemas/NotificationRuleChannelEnum'
+        delay_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 0
+        urgency:
+          $ref: '#/components/schemas/RuleUrgencyEnum'
+        enabled:
+          type: boolean
+      required:
+      - channel
     NotificationStatusEnum:
       enum:
       - pending
@@ -2573,6 +2942,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Service'
+    PatchedContactUpdateRequest:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          maxLength: 20
+        webhook_url:
+          type: string
+          maxLength: 500
     PatchedEscalationPolicyRequest:
       type: object
       description: A policy and its ordered levels. Writes replace `rules` wholesale,
@@ -2603,6 +2981,19 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+    PatchedNotificationRuleRequest:
+      type: object
+      properties:
+        channel:
+          $ref: '#/components/schemas/NotificationRuleChannelEnum'
+        delay_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 0
+        urgency:
+          $ref: '#/components/schemas/RuleUrgencyEnum'
+        enabled:
+          type: boolean
     PatchedOverrideRequest:
       type: object
       properties:
@@ -2730,6 +3121,16 @@ components:
       required:
       - delay_minutes
       - targets
+    RuleUrgencyEnum:
+      enum:
+      - any
+      - high
+      - low
+      type: string
+      description: |-
+        * `any` - Any urgency
+        * `high` - High urgency only
+        * `low` - Low urgency only
     Schedule:
       type: object
       description: 'Writes replace `layers` wholesale. Layer order is priority: the
@@ -2799,6 +3200,13 @@ components:
       - layers
       - name
       - team
+    SecretResponse:
+      type: object
+      properties:
+        webhook_secret:
+          type: string
+      required:
+      - webhook_secret
     Service:
       type: object
       properties:

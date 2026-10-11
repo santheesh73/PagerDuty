@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Pulse — {{ heading }}</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px; background: #f6f7f9; color: #14171f; }
+    main { max-width: 28rem; margin: 8vh auto 0; background: #fff; border: 1px solid #dfe3ea; border-radius: 12px; padding: 24px; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    p { margin: 8px 0; }
+    .meta { color: #5b6473; font-size: .9rem; }
+    button { margin-top: 16px; width: 100%; padding: 14px; font-size: 1rem; border: 0; border-radius: 8px; background: #2447d6; color: #fff; cursor: pointer; }
+    button.danger { background: #b3261e; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f1218; color: #e8ebf2; }
+      main { background: #181c25; border-color: #2a3040; }
+      .meta { color: #9aa3b5; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>{{ heading }}</h1>
+  {% if incident %}
+    <p><strong>#{{ incident.number }}</strong> {{ incident.title }}</p>
+    <p class="meta">{{ incident.service.name }} · {{ incident.urgency }} urgency</p>
+  {% endif %}
+  {% if message %}<p>{{ message }}</p>{% endif %}
+  {% if confirm %}
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit"{% if danger %} class="danger"{% endif %}>{{ confirm }}</button>
+    </form>
+    <p class="meta">This link works once and expires.</p>
+  {% endif %}
+</main>
+</body>
+</html>

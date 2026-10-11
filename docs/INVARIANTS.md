@@ -68,7 +68,7 @@ If an escalation step decides to page a reachable responder, a `Notification` ro
 
 - **Mechanism.** Rows are written in the *same transaction* as the decision to page (open, escalate, unacknowledge, reassign), never by a later task. Enqueueing happens only after commit (`core/dispatch.py::on_commit`), and a broker failure is logged rather than raised. `sweep_stuck_notifications` re-dispatches rows still pending after two minutes. The escalation itself is recovered by the sweeper (I7).
 - **Proof.** `escalations/tests/test_engine.py::test_broker_outage_does_not_fail_ingest` · `test_sweeper_recovers_when_the_eta_message_is_lost` · `notifications/tests/test_delivery.py::test_sweeper_redispatches_pending_rows_whose_task_was_lost` · `notifications/tests/test_poison_delivery.py::test_unexpected_error_eventually_marks_failed`. Live: `make chaos-redis`.
-- **Status.** Example-tested. Simulated: every paging event's recipients must have rows, and the drained system must have no pending rows.
+- **Status.** Example-tested. Simulated: every paging event's recipients must have rows for that page (`page_key`), always including the inbox entry, since the other channels follow each person's own plan; the drained system must have no pending rows.
 
 ### I6 — Escalation terminates
 
@@ -207,6 +207,33 @@ If delivery is delayed (broker outage, retries), a page queued before resolution
 - **Mechanism.** `notifications/actions.py::deliver` re-reads the incident under the row lock and marks the notification `cancelled` instead of sending when the incident is resolved.
 - **Proof.** `notifications/tests/test_delivery.py::test_a_page_queued_before_resolution_is_never_sent_after_it`; the simulator resolves incidents with undelivered backlogs (`resolve_backlog`) and fails on any send for a resolved incident.
 - **Status.** Enforced and simulated. This was a real defect (DECISIONS, S2).
+
+---
+
+### I18 — A later step of a personal plan never fires for an answered page
+
+A step with a delay exists to chase an unanswered page. Once anyone acknowledges (or resolves) the
+incident, no later step of anyone's plan is delivered.
+
+- **Mechanism.** `incidents/actions.py::acknowledge` cancels pending delayed steps for the incident in
+  the same transaction; `notifications/actions.py::_claim` re-checks under the row lock and cancels any
+  delayed step whose incident is not triggered (the guard is the rule, the eager cancel an
+  optimisation). Resolve is covered by C1.
+- **Proof.** `notifications/tests/test_rules.py::test_acknowledging_cancels_the_later_steps_but_not_the_ones_already_due` ·
+  `test_a_late_step_is_cancelled_at_claim_time_even_if_the_ack_missed_it` · `test_resolving_cancels_a_pending_step_too`;
+  the simulator fails on any send of a delayed step for a non-triggered incident. Mutation
+  `step-cancel-on-ack` is caught.
+- **Status.** Enforced and simulated.
+
+### I19 — A later step is never sent before its time
+
+- **Mechanism.** The row carries `not_before`; `_claim` returns without claiming (and without counting
+  an attempt) while `now < not_before`, so an early, duplicated or skewed task is harmless.
+  `redispatch_stuck` ignores steps that are not yet due.
+- **Proof.** `test_rules.py::test_a_delayed_step_is_not_sent_early_and_is_sent_once_due` ·
+  `test_a_lost_eta_message_is_recovered_by_the_stuck_sweep_once_the_step_is_due`; simulated (fails on
+  any send before `not_before`). Mutation `step-not-before` is caught.
+- **Status.** Enforced and simulated.
 
 ---
 

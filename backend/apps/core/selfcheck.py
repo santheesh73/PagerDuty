@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from django.db import connection
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core import heartbeat
@@ -41,9 +42,16 @@ def overdue_escalations(now: datetime) -> int:
 
 
 def stuck_notifications(now: datetime) -> int:
-    return Notification.objects.filter(
-        status=Notification.Status.PENDING, updated_at__lt=now - STUCK_AFTER
-    ).count()
+    # A later step of a personal notification plan is pending *on purpose* until its time, so
+    # "stuck" is measured from when it became due, not from when it was created.
+    return (
+        Notification.objects.filter(status=Notification.Status.PENDING)
+        .filter(
+            Q(not_before__isnull=True, updated_at__lt=now - STUCK_AFTER)
+            | Q(not_before__lt=now - STUCK_AFTER)
+        )
+        .count()
+    )
 
 
 def run(*, include_beat: bool = True, now: datetime | None = None) -> list[Check]:

@@ -23,6 +23,7 @@ from apps.core.errors import Conflict, InvalidTransition
 from apps.escalations import engine
 from apps.escalations.snapshot import build_snapshot, next_step
 from apps.notifications.actions import page
+from apps.notifications.models import Notification
 
 from .models import EventType, Incident, IncidentEvent, Status, Urgency
 from .timeline import record
@@ -138,7 +139,7 @@ def open_incident(
             loop=0,
             message="Nobody on call at level 1; moving on",
         )
-    page(incident, responders, level=0, loop=0)
+    page(incident, responders, level=0, loop=0, now=now)
     engine.schedule_eta(incident, now)
     return incident
 
@@ -161,6 +162,10 @@ def acknowledge(
         Alert.objects.filter(incident=incident, status=Alert.Status.TRIGGERED).update(
             status=Alert.Status.ACKNOWLEDGED
         )
+        # The later steps of people's notification plans exist to chase an unanswered page.
+        Notification.objects.filter(
+            incident=incident, status=Notification.Status.PENDING, not_before__isnull=False
+        ).update(status=Notification.Status.CANCELLED)
         record(
             incident,
             EventType.ACKNOWLEDGED,
@@ -201,6 +206,7 @@ def unacknowledge(incident_id: int, *, actor: User, now: datetime | None = None)
             level=incident.escalation_level,
             loop=incident.escalation_loop,
             seq=event.pk,
+            now=now,
         )
         engine.schedule_eta(incident, now)
         return incident
@@ -255,6 +261,7 @@ def reassign(
             level=incident.escalation_level,
             loop=incident.escalation_loop,
             seq=event.pk,
+            now=now,
         )
         engine.schedule_eta(incident, now)
         return incident

@@ -94,7 +94,10 @@ real ones pass 11/11.
 on a fresh database failed 3 out of 4, every round (`duplicate key value violates unique constraint
 "pg_type_typname_nsp_index"`), which is exactly what starting several API replicas together does. The
 container entrypoint now runs `manage.py migrate_safely`, which holds a Postgres advisory lock while it
-migrates, so the others wait and find nothing left to do. A test starts four at once and requires four
+migrates, so the others wait and find nothing left to do. Waiters poll `pg_try_advisory_lock` rather
+than block: a blocked lock call is an open transaction, and `CREATE INDEX CONCURRENTLY` waits for every
+open transaction, so the first version deadlocked as soon as a migration built an index concurrently
+(found when the channels phase added one; reproduced, then fixed). A test starts four at once and requires four
 successes (`test_concurrent_migrate_safely_on_a_fresh_database_all_succeed`); removing the lock makes it fail.
 The migration itself runs with `lock_timeout` 10 s, so one that cannot get its table lock fails and the
 container restarts instead of queueing behind a long transaction and blocking all traffic behind itself.
