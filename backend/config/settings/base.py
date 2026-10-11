@@ -50,6 +50,7 @@ AUTH_USER_MODEL = "accounts.User"
 MIDDLEWARE = [
     "apps.core.middleware.RequestIDMiddleware",
     "apps.core.middleware.ObservabilityMiddleware",
+    "apps.core.api_errors.BodySizeLimitMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -58,6 +59,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.security.middleware.MfaEnrolmentMiddleware",
+    "apps.core.idempotency.IdempotencyMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
@@ -153,6 +155,10 @@ TIME_ZONE = "UTC"
 USE_I18N = False
 USE_TZ = True
 
+# 1 MiB for any request body (nginx enforces the same at the edge). The Events API has its own,
+# smaller, documented limit (core/limits.py).
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
+
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
@@ -175,6 +181,9 @@ CSRF_COOKIE_HTTPONLY = False  # the SPA reads it to echo X-CSRFToken
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "http://localhost:5173")
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOW_CREDENTIALS = True
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 
 # --- DRF -------------------------------------------------------------------
 REST_FRAMEWORK = {

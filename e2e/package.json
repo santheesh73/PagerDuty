@@ -2,11 +2,12 @@
   "name": "pulse-e2e",
   "private": true,
   "version": "0.0.0",
-  "description": "One end-to-end journey against the Docker stack: alert -> page -> escalate -> ack -> resolve",
+  "description": "Browser journey (alert -> page -> escalate -> ack -> resolve) and an axe accessibility audit, against the Docker stack",
   "scripts": {
     "test": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.64.0"
   }
 }

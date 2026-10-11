@@ -34,6 +34,9 @@ api_docs = csp_override(
     }
 )(SpectacularSwaggerView.as_view(url_name="schema"))
 
+handler404 = "apps.core.api_errors.not_found"
+handler500 = "apps.core.api_errors.server_error"
+
 urlpatterns = [
     path("healthz", healthz, name="healthz"),
     path("readyz", readyz, name="readyz"),

@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import asdict
+from typing import Any
 
 from django.db.models import Count, Q, QuerySet
 from drf_spectacular.utils import extend_schema
@@ -12,7 +13,7 @@ from rest_framework.serializers import BaseSerializer
 
 from apps.alerting.actions import Event, ingest
 from apps.core.permissions import IsTeamMember, Role
-from apps.core.views import actor, require_role, scope_to_teams
+from apps.core.views import actor, no_store, require_role, scope_to_teams
 from apps.incidents.models import Status
 from apps.security import audit
 from apps.security.audit import AuditedMixin
@@ -38,11 +39,20 @@ class ServiceViewSet(AuditedMixin, viewsets.ModelViewSet):
                 open_low=Count("incidents", filter=OPEN & Q(incidents__urgency="low")),
             ),
             self.request.user,
-        ).order_by("name")
+        ).order_by("name", "id")
 
     def perform_create(self, serializer: BaseSerializer) -> None:
         require_role(self.request.user, serializer.validated_data["team"].pk, Role.ADMIN)
         serializer.save()
+
+    def finalize_response(
+        self, request: Request, response: Response, *args: Any, **kwargs: Any
+    ) -> Response:
+        response = super().finalize_response(request, response, *args, **kwargs)
+        # A freshly issued integration key (create, rotate) is shown exactly once.
+        if isinstance(response.data, dict) and response.data.get("integration_key"):
+            no_store(response)
+        return response
 
     def _fresh(self, service: Service, *, issued_key: str | None = None) -> Response:
         context = {**self.get_serializer_context(), "issued_key": issued_key}

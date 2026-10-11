@@ -32,3 +32,6 @@ dump.rdb
 loadtest/out/
 backups/
 doctor-logs.txt
+
+# Tools fetched by scripts (e.g. scripts/install-trivy.sh)
+.bin/

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from zoneinfo import available_timezones
 
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
@@ -10,6 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.params import datetime_param, int_param
 from apps.core.views import actor
 
 from . import selectors
@@ -25,13 +25,7 @@ WINDOW_PARAMS = [
 
 
 def _instant(request: Request, name: str, default: datetime) -> datetime:
-    raw = request.query_params.get(name)
-    if not raw:
-        return default
-    value = parse_datetime(raw)
-    if value is None:
-        raise ValidationError({name: "Expected an ISO-8601 datetime."})
-    return value
+    return datetime_param(request.query_params, name) or default
 
 
 def _window(request: Request) -> selectors.Window:
@@ -41,12 +35,12 @@ def _window(request: Request) -> selectors.Window:
     if not (since < until and until - since <= MAX_WINDOW):
         raise ValidationError({"since": "Window must be positive and at most 366 days."})
 
-    def as_int(name: str) -> int | None:
-        raw = request.query_params.get(name)
-        return int(raw) if raw and raw.isdigit() else None
-
+    params = request.query_params
     return selectors.Window(
-        since=since, until=until, service=as_int("service"), team=as_int("team")
+        since=since,
+        until=until,
+        service=int_param(params, "service"),
+        team=int_param(params, "team"),
     )
 
 

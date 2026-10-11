@@ -8,7 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir uv==0.11.32
+# uv builds and runs the app's venv; pip is then removed, since nothing uses it and its vendored
+# copies of urllib3 and msgpack would otherwise ship (and fail the image scan).
+RUN pip install --no-cache-dir uv==0.11.32 && pip uninstall --yes pip
 WORKDIR /app
 RUN groupadd --system pulse && useradd --system --gid pulse --home /app pulse
 

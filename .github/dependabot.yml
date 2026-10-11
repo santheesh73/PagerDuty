@@ -1,0 +1,37 @@
+# Weekly dependency updates. Minor and patch bumps are grouped into one PR per ecosystem, so
+# routine updates stay reviewable; majors arrive one at a time. CI (tests, pip-audit, npm audit,
+# Trivy) gates every one of them like any other PR.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /backend
+    schedule: { interval: weekly }
+    groups:
+      python-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    groups:
+      frontend-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule: { interval: weekly }
+    groups:
+      e2e-minor-and-patch: { update-types: [minor, patch] }
+
+  # Actions are pinned by commit SHA; Dependabot bumps the SHA and its version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directories: [/backend, /frontend, /ops/backup]
+    schedule: { interval: weekly }
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }

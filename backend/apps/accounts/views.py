@@ -15,6 +15,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.params import int_param
 from apps.core.permissions import member_team_ids
 from apps.core.throttling import LoginThrottle
 from apps.core.views import actor
@@ -147,7 +148,7 @@ class TeamViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     def get_queryset(self) -> QuerySet[Team]:
-        teams = Team.objects.all()
+        teams = Team.objects.order_by("name", "id")
         if not self.request.user.is_authenticated:
             return teams.none()
         if self.request.user.is_staff:
@@ -159,7 +160,9 @@ class TeamViewSet(viewsets.ReadOnlyModelViewSet):
     def members(self, request: Request, pk: str | None = None) -> Response:
         team = self.get_object()
         memberships = Membership.objects.filter(team=team).select_related("user")
-        return Response(TeamMemberSerializer(memberships.order_by("user__name"), many=True).data)
+        return Response(
+            TeamMemberSerializer(memberships.order_by("user__name", "user_id"), many=True).data
+        )
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
@@ -180,6 +183,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             users = User.objects.filter(is_active=True)
         else:
             users = User.objects.filter(is_active=True, memberships__team_id__in=teams)
-        if team := self.request.query_params.get("team"):
+        if (team := int_param(self.request.query_params, "team")) is not None:
             users = users.filter(memberships__team_id=team)
-        return users.distinct().order_by("name")
+        return users.distinct().order_by("name", "id")

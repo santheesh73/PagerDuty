@@ -1,6 +1,7 @@
 # Pulse developer commands.
 #   make up       build + start the six-container stack  → http://localhost:5173
-#   make check    lint + typecheck + all tests + migration drift (what CI runs)
+#   make check    lint + typecheck + all tests + migration drift (CI's fast gates)
+#   make audit    dependency advisories + Trivy (CI's supply-chain job; runs on the host)
 #
 # Quality targets run inside the containers by default so a fresh clone needs only Docker.
 # Run them on the host instead (needs uv, Node 22, Postgres, Redis) with: make check LOCAL=1
@@ -23,7 +24,7 @@ ROUTING_KEY ?=
 
 .PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor db-backup db-restore backup-drill lint-migrations \
         badge simulate loadtest e2e test test-backend test-frontend \
-        lint typecheck format migrations-check check schema shell
+        lint typecheck format migrations-check check schema shell audit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -131,10 +132,20 @@ loadtest: ## k6 against the prod-like stack (VUS=32 DURATION=60s); then verify t
 	hot=$$(python3 -c "import json;print(json.load(open('loadtest/out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])"); \
 	$$dc exec -T api python - --run-id $$run --new-keys $$new --hot-requests $$hot < loadtest/verify.py
 
-e2e: ## One Playwright journey against the prod-like stack (needs `docker compose -f docker-compose.prod.yml up -d`)
+e2e: ## Playwright journey + axe accessibility audit against the prod-like stack (needs `docker compose -f docker-compose.prod.yml up -d`)
 	cd e2e && npm ci && npx playwright install chromium && npx playwright test
 
-check: lint typecheck migrations-check test ## Everything CI runs
+check: lint typecheck migrations-check test ## Lint, typecheck, migration drift and all tests (CI's fast gates)
+
+audit: ## pip-audit, npm audit (high+) and Trivy over lockfiles, Dockerfiles and secrets (needs uv, npm, curl)
+	mkdir -p .bin
+	cd backend && uv export --frozen --no-emit-project --format requirements-txt -o ../.bin/requirements.txt
+	uvx pip-audit@2.10.0 --strict --disable-pip --progress-spinner off -r .bin/requirements.txt
+	cd frontend && npm audit --audit-level=high
+	cd e2e && npm audit --audit-level=high
+	./scripts/install-trivy.sh .bin
+	.bin/trivy fs --no-progress --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed \
+	  --exit-code 1 --skip-dirs frontend/node_modules --skip-dirs e2e/node_modules --skip-dirs backend/.venv .
 
 shell: ## Django shell
 	$(BACKEND) python manage.py shell

@@ -48,6 +48,7 @@ SAFE = ["apps/core/tests/test_data_safety.py"]
 CHAN = ["apps/notifications/tests"]
 SEC = ["apps/security/tests"]
 OBS = ["apps/core/tests/test_observability.py"]
+API = "apps/core/tests/test_api_quality.py"
 
 MUTATIONS: list[M] = [
     # --- tenancy: team scoping on every list endpoint ---------------------------------------
@@ -92,8 +93,8 @@ MUTATIONS: list[M] = [
     M("dedup-index", "apps/incidents/migrations/0001_initial.py",
       'condition=models.Q(("status", "resolved"), _negated=True),',
       'condition=models.Q(("status", "never-a-status")),',
-      ["apps/alerting/tests/test_ingest.py"], "partial unique index no longer enforces dedup",
-      create_db=True),
+      ["apps/incidents/tests/test_dedup_constraint.py", "apps/alerting/tests/test_ingest.py"],
+      "partial unique index no longer enforces dedup", create_db=True),
     M("idempotency-key", "apps/notifications/actions.py",
       'key = f"incident:{incident_id}:level:{level}:loop:{loop}:user:{user_id}:channel:{channel}"',
       'key = f"incident:{incident_id}:level:{level}:loop:{loop}:channel:{channel}"',
@@ -245,6 +246,41 @@ MUTATIONS: list[M] = [
     M("admin-password-only-login", "config/urls.py",
       "admin.site.login = admin_login  # type: ignore[method-assign,assignment]", "", SEC,
       "the Django admin accepts a password without MFA"),
+    # --- API contract (production-readiness, phase 5) -------------------------------------
+    M("cursor-tiebreak", "apps/incidents/views.py",
+      'ordering = ("-triggered_at", "-id")', 'ordering = ("-triggered_at",)', [API],
+      "a cursor over tied timestamps skips and repeats incidents"),
+    M("api-404-json", "config/urls.py",
+      'handler404 = "apps.core.api_errors.not_found"', "", [API],
+      "unknown /api/ paths answer with an HTML page"),
+    M("body-limit-early", "apps/core/api_errors.py",
+      "            if length > limit:", "            if False:", [API],
+      "oversized bodies reach the throttle and the view before being refused"),
+    M("throttle-fail-open-narrow", "apps/core/throttling.py",
+      "        except CACHE_ERRORS as exc:", "        except Exception as exc:", [API],
+      "any error inside a throttle (not just a cache outage) waves the request through"),
+    M("query-param-validation", "apps/core/params.py",
+      "    if unknown := sorted(set(values) - allowed):",
+      "    if unknown := sorted(set(values) - allowed) and False:", [API],
+      "a misspelt filter silently returns every incident, or none"),
+    M("idempotency-replay", "apps/core/idempotency.py",
+      "            stored = cache.get(stored_key)", "            stored = None", [API],
+      "a retried write with the same Idempotency-Key acts twice"),
+    M("idempotency-caller-scope", "apps/core/idempotency.py",
+      '        return f"user:{user.pk}"', '        return "user"', [API],
+      "one user's Idempotency-Key replays another user's response"),
+    M("secret-response-tombstone", "apps/core/idempotency.py",
+      '                if "no-store" in response.get("Cache-Control", ""):',
+      "                if False:", ["apps/security/tests/test_secret_responses.py"],
+      "integration keys, MFA secrets and backup codes are written to Redis for replay"),
+    M("integration-key-no-store", "apps/catalog/views.py",
+      '        if isinstance(response.data, dict) and response.data.get("integration_key"):',
+      "        if False:", ["apps/security/tests/test_secret_responses.py"],
+      "a freshly issued integration key may be cached by browsers, proxies and the replay store"),
+    M("request-id-500", "apps/core/api_errors.py",
+      "        request_id = get_request_id()",
+      '        request_id = request.headers.get("X-Request-ID", "")', [API],
+      "the 500 body echoes raw header input instead of the id the logs carry"),
 ]
 
 
