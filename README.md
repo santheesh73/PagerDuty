@@ -31,7 +31,7 @@ Seventeen written guarantees, each with the mechanism that enforces it and the t
 - **Idempotent paging.** The ETA task and the safety-net sweeper are *designed* to race. A guarded `SELECT … FOR UPDATE SKIP LOCKED` lets exactly one win, and unique notification keys mean a retry can never page twice.
 - **DST-correct rotations.** A 09:00 handoff stays at 09:00 local through spring-forward and fall-back (including a handoff inside the non-existent 02:30 hour). The resolver is pure functions with no database, tested exhaustively.
 - **Policy snapshots.** Editing an escalation policy never rewires an incident already in flight, but schedule targets still follow the live rotation.
-- **A frozen-time test suite.** 225 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
+- **A frozen-time test suite.** 240 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
 
 ## Quick start
 
