@@ -295,3 +295,65 @@ is resolved (new status, migration `0002`). **Regression.**
 - **A checker gap, not a product bug.** Seed 1 reported I9 (`first_response_at` set with no
   human event) for an incident whose human resolve is recorded as `maintenance_ended`
   rather than `resolved`. The checker now counts that event.
+
+---
+
+## What the runtime checks found
+
+Running the stack for real (`docker compose`, `make doctor`, see [`RUNBOOK.md`](RUNBOOK.md)) found faults that
+no unit test could. Each has a guard that fails against the old behaviour (noted in brackets).
+
+### R1. No email ever reached the inbox in dev
+`.env.example` pinned `EMAIL_BACKEND` to the console backend, and an explicit backend beats `EMAIL_HOST`, so
+the Mailpit wiring was silently bypassed. Found by sending an alert and finding an empty inbox. Fix: the
+variable is gone from `.env.example` and compose forces SMTP to Mailpit. [`doctor`: the page must reach Mailpit]
+
+### R2. `worker`, `beat` and the frontend had no healthcheck
+`--wait` reported them "Healthy" while meaning only "the process exists". Now: workers answer a broker round
+trip, beat checks that exactly one beat process runs, the frontend answers HTTP. [`compose ps`]
+
+### R3. A page could wait about seven minutes after a Redis outage
+A lost delivery message was re-driven by a sweep that ran every 5 minutes over rows older than 2. Now 60 s and
+90 s: about 2.5 minutes. [`test_a_lost_deliver_message_is_redriven_within_three_minutes`]
+
+### R4. `/readyz` pulled instances out of rotation exactly when Redis was down
+Redis-down returned 503, though the API still ingests and commits without it. Now `degraded` with a 200;
+only Postgres is required. [`test_redis_down_is_degraded_not_unready`, doctor drill]
+
+### R5. A multi-line alert summary permanently failed the email page
+The incident title is the raw summary and a header may not contain a newline, so the email failed five times and
+gave up while the in-app page still arrived. Titles and subjects are collapsed to one line.
+[`test_a_multi_line_summary_still_reaches_the_inbox_by_email`]
+
+### R6. SMTP could not be configured, and `send_mail` ran under a row lock
+Only the backend class was configurable, with no timeout, and the send happened inside a transaction holding
+the notification row. Now host, port, TLS, credentials and a 10 s timeout come from the environment, and
+`deliver` claims, sends with no transaction open, then settles, keeping send-once. [`test_delivery_claim.py`]
+
+### R7. Login throttling trusted a client-supplied `X-Forwarded-For`
+Rotating a forged prefix gave every attempt a fresh bucket (14 wrong passwords, then a successful login, in
+the security audit). nginx now appends the peer, Django reads the address that many proxies from the right
+(`NUM_PROXIES`), and the prod compose sets 1. [doctor: 13 forged attempts must reach 429; with `NUM_PROXIES`
+unset the same check fails (verified)]
+
+### R8. "The escalations queue is first" was false
+`-Q escalations,notifications,default` is not a priority: kombu's Redis transport round-robins its queues. Paging
+is now isolated by a worker that consumes only `escalations`. On a single-worker host all three queues still
+share one process, which the docs now say.
+
+### R9. A flaw in the drill, not the stack
+The first API-crash drill used `docker compose kill`, which Docker treats as a manual stop, so the restart
+policy correctly left the container down. The drill now simulates real crashes: SIGKILL every gunicorn worker
+(the master must respawn them) and make PID 1 exit on its own (the restart policy must bring it back).
+
+### R10. `make test` took nearly nine minutes in the container
+`.env` exports `DJANGO_SETTINGS_MODULE=config.settings.dev`, and an environment variable beats the setting in
+`pytest.ini`, so the suite ran on dev settings (real password hashing, the real broker) instead of test
+settings: 8m42s for 240 tests, against under two minutes in CI. Found on the clean-clone run; the security
+audit had flagged the same variable. pytest now pins the module with `--ds`.
+[`test_the_suite_runs_on_test_settings_whatever_the_environment_says`]
+
+### Smaller
+`backend/.dockerignore` now excludes `.env*`, `*.rdb` and `.git`; the SPA is served with `nosniff`,
+`X-Frame-Options` and `Referrer-Policy`; the throttle's fail-open path logs one line instead of a 40-line
+traceback per request; the prod compose no longer seeds demo data or prints demo logins by default.

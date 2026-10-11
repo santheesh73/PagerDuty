@@ -27,7 +27,7 @@ flowchart LR
     FE -- "/api proxy" --> API
     API -- "read / write" --> DB
     API -- "enqueue on commit" --> R
-    B -- "every 30 s / 60 s / 5 min" --> R
+    B -- "every 30 s / 60 s / 60 s" --> R
     R -- "tasks" --> W
     W -- "read / write" --> DB
 ```
@@ -36,8 +36,10 @@ flowchart LR
 |---|---|
 | `frontend` | React SPA. Vite dev server in development; nginx serving the built bundle in production. Proxies `/api` so the browser sees one origin (cookies + CSRF, no CORS). |
 | `backend` | Django + DRF API, Events API, admin. Gunicorn. `/healthz` (process up) and `/readyz` (DB + Redis reachable). |
-| `worker` | Celery worker consuming `escalations` first, then `notifications`, then `default`, so a notification backlog can never delay paging. |
-| `beat` | `sweep_due_escalations` every 30 s, `expire_service_modes` every 60 s, `sweep_stuck_notifications` every 5 min. |
+| `worker-escalations` | A Celery worker that consumes **only** the `escalations` queue. Listing queues in `-Q` order is not a priority (kombu's Redis transport round-robins its queues), so isolation needs a separate worker; a notification backlog (slow SMTP, retries) can then never delay paging. |
+| `worker` | Celery worker for `notifications` and `default`. Without `CELERY_QUEUES` one process serves all three queues (used on single-worker hosts such as the Render demo). |
+| `beat` | `sweep_due_escalations` every 30 s, `expire_service_modes` every 60 s, `sweep_stuck_notifications` every 60 s. |
+| `mailpit` | Dev and smoke-test SMTP sink with an inbox UI; production points `EMAIL_HOST` at a real server. |
 | `db` | PostgreSQL 17. Every guarantee (dedup, single escalation, single page) is a Postgres constraint or row lock. |
 | `redis` | Broker + throttle cache. Started with persistence off on purpose. |
 

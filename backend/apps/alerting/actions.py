@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from apps.catalog.models import Service
 from apps.core.errors import Conflict, InvalidTransition
+from apps.core.text import one_line
 from apps.incidents import actions as incident_actions
 from apps.incidents.models import Incident, Status, Urgency
 
@@ -93,7 +94,11 @@ def _trigger(service: Service, event: Event, now: datetime) -> IngestResult:
                     incident = incident_actions.open_incident(
                         service,
                         dedup_key=incident_key,
-                        title=(f"Maintenance: {service.name}" if in_maintenance else event.summary),
+                        title=(
+                            f"Maintenance: {service.name}"
+                            if in_maintenance
+                            else one_line(event.summary)
+                        ),
                         urgency=urgency,
                         now=now,
                         is_maintenance=in_maintenance,

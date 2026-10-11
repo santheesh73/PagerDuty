@@ -5,7 +5,10 @@
 #   SECRET_KEY=$(openssl rand -hex 32) docker compose -f docker-compose.prod.yml up --build -d
 #   → http://localhost:8080
 #
-# For real deployments put TLS in front and set SECURE_COOKIES / SECURE_SSL_REDIRECT to 1.
+# Defaults are the safe ones: no demo data, no demo logins on the sign-in page. For a demo or
+# a smoke test add  SEED_DEMO=1 SHOW_DEMO_CREDENTIALS=true  (`make doctor` does).
+# For real deployments put TLS in front and set SECURE_COOKIES / SECURE_SSL_REDIRECT to 1,
+# and point EMAIL_HOST at a real SMTP server instead of Mailpit.
 
 x-api-env: &api-env
   DJANGO_SETTINGS_MODULE: config.settings.prod
@@ -17,10 +20,19 @@ x-api-env: &api-env
   FRONTEND_URL: http://localhost:8080
   SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-0}
   SECURE_COOKIES: ${SECURE_COOKIES:-0}
-  SEED_DEMO: ${SEED_DEMO:-1}
+  SEED_DEMO: ${SEED_DEMO:-0}
+  # nginx (the `web` service) is the only proxy in front of Django here and appends the peer
+  # address to X-Forwarded-For, so trust exactly one hop. Behind another proxy/LB, raise it.
+  NUM_PROXIES: ${NUM_PROXIES:-1}
   # Load tests raise the per-key Events API limit (the default is a protection, not a capacity).
   THROTTLE_EVENTS: ${THROTTLE_EVENTS:-120/min}
   GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
+  EMAIL_HOST: ${EMAIL_HOST:-mailpit}
+  EMAIL_PORT: ${EMAIL_PORT:-1025}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-0}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-pulse@localhost}
 
 x-api: &api
   build:
@@ -29,12 +41,19 @@ x-api: &api
   environment: *api-env
   restart: unless-stopped
 
+x-worker-health: &worker-health
+  test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME -t 5 >/dev/null"]
+  interval: 15s
+  timeout: 10s
+  retries: 4
+  start_period: 20s
+
 services:
   db:
     image: postgres:17-alpine
     environment: { POSTGRES_USER: pulse, POSTGRES_PASSWORD: pulse, POSTGRES_DB: pulse }
     volumes: [pgdata-prod:/var/lib/postgresql/data]
-    healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse"], interval: 3s, retries: 20 }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse -d pulse"], interval: 3s, retries: 20 }
     restart: unless-stopped
 
   redis:
@@ -43,39 +62,90 @@ services:
     healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 3s, retries: 20 }
     restart: unless-stopped
 
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports: ["8025:8025"] # inbox UI and API for the smoke test; SMTP (1025) stays internal
+    healthcheck: { test: ["CMD", "/mailpit", "readyz"], interval: 5s, retries: 12 }
+    restart: unless-stopped
+
   api:
     <<: *api
     command: ["api"]
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 5s
       retries: 60
       start_period: 15s
 
+  # Paging gets a worker that consumes nothing else, so a notification backlog can never
+  # delay an escalation. (-Q order alone is not a priority: kombu round-robins its queues.)
+  worker-escalations:
+    <<: *api
+    command: ["worker"]
+    environment:
+      <<: *api-env
+      CELERY_QUEUES: escalations
+      CELERY_CONCURRENCY: "2"
+    depends_on: { api: { condition: service_healthy } }
+    healthcheck: *worker-health
+
   worker:
     <<: *api
     command: ["worker"]
+    environment:
+      <<: *api-env
+      CELERY_QUEUES: notifications,default
     depends_on: { api: { condition: service_healthy } }
+    healthcheck: *worker-health
 
   beat:
     <<: *api
     command: ["beat"]
     depends_on: { api: { condition: service_healthy } }
+    healthcheck:
+      # Exactly one beat process must be alive (two would double every sweep).
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import os, sys
+          def cmd(p):
+              try:
+                  return open(f"/proc/{p}/cmdline", "rb").read()
+              except OSError:
+                  return b""
+          me = str(os.getpid())
+          n = sum(1 for p in os.listdir("/proc") if p.isdigit() and p != me and b"celery" in cmd(p) and b"beat" in cmd(p))
+          sys.exit(0 if n == 1 else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 15s
 
   web:
     build:
       context: ./frontend
       target: prod
       args:
-        VITE_SHOW_DEMO_CREDENTIALS: ${SHOW_DEMO_CREDENTIALS:-true}
+        VITE_SHOW_DEMO_CREDENTIALS: ${SHOW_DEMO_CREDENTIALS:-false}
     environment:
       PORT: "80"
       API_UPSTREAM: http://api:8000
     ports: ["8080:80"]
     depends_on: { api: { condition: service_healthy } }
+    healthcheck:
+      # 127.0.0.1, not localhost: BusyBox wget tries ::1 first and does not fall back, and our
+      # nginx template listens on IPv4 only, so "localhost" fails on any host with IPv6 enabled
+      # (GitHub's runners). Found by CI, not by a machine with IPv6 off.
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
 
 volumes:

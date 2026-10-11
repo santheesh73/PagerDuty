@@ -1,17 +1,33 @@
 # Local stack: `make up` (or `docker compose up --build`) → http://localhost:5173
 # Postgres is the only source of truth; Redis can be wiped at any time without losing an incident.
+# Pages are emailed to Mailpit (inbox UI: http://localhost:8025), so nothing leaves your machine.
+
+x-env: &env
+  DATABASE_URL: postgres://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulse}@db:5432/${POSTGRES_DB:-pulse}
+  REDIS_URL: redis://redis:6379/0
+  # Compose `environment` beats `env_file`, so an old .env that still pins the console backend
+  # cannot silently bypass Mailpit.
+  EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+  EMAIL_HOST: mailpit
+  EMAIL_PORT: "1025"
 
 x-backend: &backend
   build:
     context: ./backend
     target: dev
   env_file: .env
-  environment:
-    DATABASE_URL: postgres://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulse}@db:5432/${POSTGRES_DB:-pulse}
-    REDIS_URL: redis://redis:6379/0
+  environment: *env
   volumes:
     - ./backend:/app
   restart: unless-stopped
+
+x-worker-health: &worker-health
+  # A real round trip to this worker over the broker, not just "the process exists".
+  test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME -t 5 >/dev/null"]
+  interval: 15s
+  timeout: 10s
+  retries: 4
+  start_period: 20s
 
 services:
   db:
@@ -23,7 +39,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pulse}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pulse} -d ${POSTGRES_DB:-pulse}"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -40,36 +56,86 @@ services:
       retries: 20
     restart: unless-stopped
 
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports:
+      - "8025:8025" # inbox UI and API; SMTP (1025) is internal to the stack
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
   backend:
     <<: *backend
     command: ["api", "--reload"]
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulse}@db:5432/${POSTGRES_DB:-pulse}
-      REDIS_URL: redis://redis:6379/0
+      <<: *env
       SEED_DEMO: ${SEED_DEMO:-1}
     ports:
       - "8000:8000"
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
     healthcheck:
+      # Liveness: the container is restarted/replaced on this, so it must not flap when a
+      # backing store blips. Readiness (/readyz) is what `make doctor` and load balancers use.
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 5s
       timeout: 3s
       retries: 60
       start_period: 10s
 
+  # Paging gets a worker that consumes nothing else, so a notification backlog (slow SMTP,
+  # retries) can never delay an escalation. (-Q order alone is not a priority.)
+  worker-escalations:
+    <<: *backend
+    command: ["worker"]
+    environment:
+      <<: *env
+      CELERY_QUEUES: escalations
+      CELERY_CONCURRENCY: "2"
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck: *worker-health
+
   worker:
     <<: *backend
     command: ["worker"]
+    environment:
+      <<: *env
+      CELERY_QUEUES: notifications,default
     depends_on:
       backend: { condition: service_healthy }
+    healthcheck: *worker-health
 
   beat:
     <<: *backend
     command: ["beat"]
     depends_on:
       backend: { condition: service_healthy }
+    healthcheck:
+      # Exactly one beat process must be alive (two would double every sweep).
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import os, sys
+          def cmd(p):
+              try:
+                  return open(f"/proc/{p}/cmdline", "rb").read()
+              except OSError:
+                  return b""
+          me = str(os.getpid())
+          n = sum(1 for p in os.listdir("/proc") if p.isdigit() and p != me and b"celery" in cmd(p) and b"beat" in cmd(p))
+          sys.exit(0 if n == 1 else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 15s
 
   frontend:
     build:
@@ -84,6 +150,14 @@ services:
       - "5173:5173"
     depends_on:
       backend: { condition: service_healthy }
+    healthcheck:
+      # 127.0.0.1, not localhost: BusyBox wget tries ::1 first and does not fall back, and Vite
+      # listens on IPv4 only, so "localhost" fails on any host with IPv6 enabled.
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
 
 volumes:

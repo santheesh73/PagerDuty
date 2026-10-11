@@ -27,6 +27,9 @@ class Notification(TimeStampedModel):
     idempotency_key = models.CharField(max_length=255, unique=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     attempts = models.PositiveSmallIntegerField(default=0)
+    # Set while a worker is sending; see actions.deliver. Lets us talk to SMTP without holding
+    # a row lock, yet still send at most once.
+    claimed_at = models.DateTimeField(null=True, blank=True)
     last_error = models.TextField(blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     read_at = models.DateTimeField(null=True, blank=True)

@@ -111,6 +111,9 @@ jobs:
     timeout-minutes: 20
     env:
       SECRET_KEY: ci-only-not-a-secret
+      # The prod compose defaults to no demo data and no demo logins; the journey needs both.
+      SEED_DEMO: "1"
+      SHOW_DEMO_CREDENTIALS: "true"
       # The default 120/min per-key limit protects production; the smoke run needs headroom.
       THROTTLE_EVENTS: 100000/min
     steps:
@@ -149,3 +152,21 @@ jobs:
       - name: Stack logs on failure
         if: failure()
         run: docker compose -f docker-compose.prod.yml logs --tail 200
+
+  docker-smoke:
+    name: Docker stack doctor (boot, flow, failure drills)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Boots the prod-like stack from scratch, drives the whole alert flow, then kills Redis,
+      # the workers, the database and the API in turn and checks it recovers. See scripts/doctor.py.
+      - name: make doctor
+        run: ./scripts/doctor.sh
+      - name: Upload stack logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-logs
+          path: doctor-logs.txt

@@ -2,7 +2,9 @@
 
 `/healthz` answers "is the process up?" and touches nothing, so an orchestrator never
 restarts a healthy web process because Postgres blipped. `/readyz` answers "can this
-instance serve traffic?" and checks both backing stores.
+instance serve traffic?" and checks both backing stores: Postgres is required (503 without
+it); Redis is not, because Pulse commits alerts and pages without it and the sweepers catch
+up, so a Redis outage is reported as `degraded` with a 200.
 """
 
 from django.conf import settings
@@ -32,7 +34,10 @@ def readyz(request: HttpRequest) -> JsonResponse:
         checks["redis"] = "ok"
     except RedisError as exc:
         checks["redis"] = f"error: {exc.__class__.__name__}"
-    ready = all(v == "ok" for v in checks.values())
-    return JsonResponse(
-        {"status": "ok" if ready else "unavailable", "checks": checks}, status=200 if ready else 503
-    )
+    if checks["database"] != "ok":
+        status, code = "unavailable", 503
+    elif checks["redis"] != "ok":
+        status, code = "degraded", 200
+    else:
+        status, code = "ok", 200
+    return JsonResponse({"status": status, "checks": checks}, status=code)

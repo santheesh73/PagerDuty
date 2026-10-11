@@ -31,7 +31,7 @@ Seventeen written guarantees, each with the mechanism that enforces it and the t
 - **Idempotent paging.** The ETA task and the safety-net sweeper are *designed* to race. A guarded `SELECT … FOR UPDATE SKIP LOCKED` lets exactly one win, and unique notification keys mean a retry can never page twice.
 - **DST-correct rotations.** A 09:00 handoff stays at 09:00 local through spring-forward and fall-back (including a handoff inside the non-existent 02:30 hour). The resolver is pure functions with no database, tested exhaustively.
 - **Policy snapshots.** Editing an escalation policy never rewires an incident already in flight, but schedule targets still follow the live rotation.
-- **A frozen-time test suite.** 225 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
+- **A frozen-time test suite.** 240 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
 
 ## Quick start
 
@@ -40,11 +40,13 @@ Needs Docker. Everything else runs in containers.
 ```bash
 git clone https://github.com/santheesh73/PagerDuty.git pulse && cd pulse
 cp .env.example .env
-make up          # builds and starts all six containers, migrates, seeds → http://localhost:5173
+make up          # builds and starts the stack, waits until every service is healthy, migrates, seeds
 make check       # lint + typecheck + all tests + migration drift (what CI runs)
 ```
 
-API docs (Swagger UI): <http://localhost:8000/api/docs/>. Django admin: <http://localhost:8000/admin/>.
+Open <http://localhost:5173> (sign in with the demo logins above). Pages are emailed to Mailpit at <http://localhost:8025>. API docs (Swagger UI): <http://localhost:8000/api/docs/>. Django admin: <http://localhost:8000/admin/>.
+
+`make doctor` boots the production-like stack from scratch and proves it works end to end: an alert pages and escalates, a duplicate attaches, and Redis, the workers, the database and the API are each killed in turn and the stack recovers. It takes about 8 minutes and CI runs it on every push. Day-to-day: `make logs`, `make migrate`, `make seed`, `make db-backup`, `make down`; the [runbook](docs/RUNBOOK.md) has ports, environment variables and fixes for common failures.
 
 <details>
 <summary>Without Docker</summary>
@@ -100,12 +102,14 @@ flowchart LR
 |---|---|
 | `frontend` | React 19 + TypeScript SPA (Vite, React Router, TanStack Query, Tailwind) |
 | `backend` | Django 6 + DRF API, Events API, admin; Gunicorn; `/healthz`, `/readyz` |
-| `worker` | Celery: `escalations` queue first, so notifications can't delay paging |
-| `beat` | Escalation sweeper (30 s), mode expiry (60 s), stuck-notification sweeper (5 min) |
+| `worker-escalations` | Celery worker that consumes **only** the `escalations` queue, so a notification backlog can never delay paging (`-Q` order alone is not a priority) |
+| `worker` | Celery: `notifications` and `default` queues |
+| `beat` | Escalation sweeper (30 s), mode expiry (60 s), stuck-notification sweeper (60 s) |
+| `mailpit` | SMTP sink with an inbox UI at <http://localhost:8025>: every page is emailed here in dev; set `EMAIL_HOST` for real mail |
 | `db` | PostgreSQL 17: dedup, single escalation and single page are all Postgres guarantees |
 | `redis` | Broker + throttle cache, persistence deliberately off |
 
-Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing model and the failures it survives, on-call algorithm, data model) · [**Decisions**](docs/DECISIONS.md) (17 entries, with alternatives) · [**Stack**](docs/STACK.md) (every pinned version and why).
+Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing model and the failures it survives, on-call algorithm, data model) · [**Decisions**](docs/DECISIONS.md) (18 numbered decisions with alternatives, plus what the property tests, the simulator and the runtime checks found) · [**Stack**](docs/STACK.md) (every pinned version and why).
 
 ## The seven capabilities
 
