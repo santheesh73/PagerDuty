@@ -1,3 +1,8 @@
+import os
+
+# pytest-django holds one transaction open for a whole test; do not let the idle limit kill it.
+os.environ.setdefault("DB_IDLE_IN_TX_TIMEOUT_MS", "0")
+
 from .base import *  # noqa: F403
 
 SECRET_KEY = "test-only-key"

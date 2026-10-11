@@ -8,7 +8,9 @@ shift || true
 
 case "$role" in
   api)
-    python manage.py migrate --noinput
+    # Serialised by an advisory lock: concurrent replicas starting together would otherwise
+    # race on a fresh database. No statement timeout: a migration may legitimately be slow.
+    DB_STATEMENT_TIMEOUT_MS=0 python manage.py migrate_safely
     if [ "${SEED_DEMO:-0}" = "1" ]; then
       python manage.py seed_demo
     fi

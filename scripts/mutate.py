@@ -44,6 +44,7 @@ class M:
 
 
 MATRIX = ["apps/core/tests/test_tenant_matrix.py"]
+SAFE = ["apps/core/tests/test_data_safety.py"]
 OBS = ["apps/core/tests/test_observability.py"]
 
 MUTATIONS: list[M] = [
@@ -150,6 +151,22 @@ MUTATIONS: list[M] = [
     M("log-request-redaction", "apps/core/logging.py", "            record.request = None",
       "            record.request = record.request", OBS,
       "django.request log records keep the query string"),
+    # --- data safety -----------------------------------------------------------------------
+    M("migrate-lock", "apps/core/management/commands/migrate_safely.py",
+      'cursor.execute("SELECT pg_advisory_lock(%s)", [LOCK_KEY])', "pass", SAFE,
+      "concurrent migrate on a fresh database crashes (3 of 4 processes)"),
+    M("retention-keeps-open", "apps/core/retention.py",
+      "Incident.objects.filter(status=Status.RESOLVED, resolved_at__lt=cutoff)",
+      "Incident.objects.filter(triggered_at__lt=cutoff)", SAFE,
+      "retention deletes open incidents"),
+    M("retention-off-by-default", "apps/core/retention.py", "    if days <= 0:", "    if False:", SAFE,
+      "RETENTION_DAYS=0 deletes everything"),
+    M("retention-alerts", "apps/core/retention.py",
+      "        alerts += Alert.objects.filter(incident_id__in=ids).delete()[0]\n", "", SAFE,
+      "alert payloads survive the purge of their incident"),
+    M("db-statement-timeout", "config/settings/base.py", '("statement_timeout", "DB_STATEMENT_TIMEOUT_MS", 15_000),',
+      '("statement_timeout", "DB_STATEMENT_TIMEOUT_MS", 0),', SAFE,
+      "a runaway query is no longer cancelled"),
 ]
 
 

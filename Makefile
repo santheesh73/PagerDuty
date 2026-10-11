@@ -21,7 +21,7 @@ SERVICE ?= checkout-api
 ROUTING_KEY ?=
 
 
-.PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor db-backup db-restore \
+.PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor db-backup db-restore backup-drill lint-migrations \
         badge simulate loadtest e2e test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell
 
@@ -76,6 +76,12 @@ db-backup: ## Dump the database to backups/pulse-<timestamp>.dump (custom format
 db-restore: ## Restore a dump over the database: make db-restore FILE=backups/pulse-....dump
 	@test -n "$(FILE)" || { echo "usage: make db-restore FILE=backups/pulse-....dump"; exit 1; }
 	$(COMPOSE) exec -T db pg_restore -U $${POSTGRES_USER:-pulse} -d $${POSTGRES_DB:-pulse} --clean --if-exists --no-owner < $(FILE)
+
+backup-drill: ## Prove backups work: seed, back up, restore elsewhere, compare, boot the API (needs Postgres + a CREATEDB role)
+	DATABASE_URL=$${DATABASE_URL:-postgres://pulse:pulse@localhost:5432/pulse} ./scripts/backup_drill.sh
+
+lint-migrations: ## Flag migrations that are unsafe to run against a live database
+	cd backend && DJANGO_SETTINGS_MODULE=config.settings.lint uv run python manage.py lintmigrations
 
 test-backend: ## Backend tests with coverage (fails under 85%)
 	$(BACKEND) pytest --cov --cov-report=term-missing:skip-covered --cov-fail-under=85

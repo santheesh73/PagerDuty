@@ -39,8 +39,8 @@ gunicorn worker and restart. Request metrics are counted in-process and merged a
 | `pulse_beat_last_run_timestamp_seconds` | gauge | Unix time of Beat's last heartbeat |
 
 Cost: a scrape runs about ten small aggregate queries. At the intended scale (thousands of
-incidents) that is milliseconds; the delivery histogram scans sent notifications, which a retention
-policy (the data-safety phase adds one) will keep bounded.
+incidents) that is milliseconds; the delivery histogram scans sent notifications, which a
+[retention policy](DATA_SAFETY.md#retention) keeps bounded.
 
 ## Alerts
 

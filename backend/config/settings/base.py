@@ -78,13 +78,45 @@ TEMPLATES = [
     },
 ]
 
+
+def _db_session_options() -> str:
+    """Postgres session limits, so one bad query or client cannot wedge the whole database.
+
+    * statement_timeout: a runaway query is cancelled instead of pinning a worker (15 s; every
+      request and task here is small, indexed work).
+    * lock_timeout: waiting for a row/table lock gives up (5 s) instead of queueing forever.
+    * idle_in_transaction_session_timeout: a client that opened a transaction and went quiet is
+      dropped (60 s) because it is holding locks. Delivery deliberately sends with no
+      transaction open, so a legitimate path never idles in one.
+
+    Set any of the DB_*_MS variables to 0 to omit that limit. Poolers in transaction mode
+    (PgBouncer, Neon's pooled endpoint) reject startup options: set all three to 0 there.
+    """
+    limits = (
+        ("statement_timeout", "DB_STATEMENT_TIMEOUT_MS", 15_000),
+        ("lock_timeout", "DB_LOCK_TIMEOUT_MS", 5_000),
+        ("idle_in_transaction_session_timeout", "DB_IDLE_IN_TX_TIMEOUT_MS", 60_000),
+    )
+    parts = []
+    for name, variable, default in limits:
+        milliseconds = int(os.environ.get(variable, default))
+        if milliseconds > 0:
+            parts.append(f"-c {name}={milliseconds}")
+    return " ".join(parts)
+
+
 DATABASES = {
     "default": dj_database_url.parse(
         os.environ.get("DATABASE_URL", "postgres://pulse:pulse@localhost:5432/pulse"),
-        conn_max_age=60,
+        # Persistent connections avoid a TCP+auth handshake per request; health checks drop a
+        # connection the server closed. Total = gunicorn workers + Celery processes (about 10
+        # by default), far under Postgres' 100. Use 0 behind a transaction-mode pooler.
+        conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "60")),
         conn_health_checks=True,
     )
 }
+if _session_options := _db_session_options():
+    DATABASES["default"].setdefault("OPTIONS", {})["options"] = _session_options
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -170,6 +202,15 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+# Redis re-delivers an unacked message after this long. Recovery of a dead worker's page does NOT
+# depend on it (the 60 s stuck-notification sweep re-drives within ~2.5 minutes), so it only has
+# to exceed the longest legitimate ETA wait to avoid pointless redelivery of escalation timers;
+# those are minutes, and the DB timer is authoritative anyway. Explicit rather than the default.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 3600}
+# A wedged task must free its worker slot: nothing here runs longer than a few seconds (SMTP has
+# its own 10 s timeout), so 60 s soft / 90 s hard is generous.
+CELERY_TASK_SOFT_TIME_LIMIT = 60
+CELERY_TASK_TIME_LIMIT = 90
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 # Paging must never queue behind a notification backlog, so escalations get their own queue.
 CELERY_TASK_QUEUES = (Queue("escalations"), Queue("notifications"), Queue("default"))
@@ -187,6 +228,10 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     "expire-service-modes": {
         "task": "apps.catalog.tasks.expire_service_modes",
         "schedule": timedelta(seconds=60),
+    },
+    "purge-old-data": {
+        "task": "apps.core.tasks.purge_old_data",
+        "schedule": timedelta(hours=24),
     },
     "ops-heartbeat": {
         "task": "apps.core.tasks.heartbeat_task",
@@ -254,6 +299,10 @@ LOGGING = {
         "celery": {"level": "INFO"},
     },
 }
+
+# Delete resolved incidents (and their alerts, timeline, notifications) older than this many
+# days. 0 = keep everything, which is the default. See docs/DATA_SAFETY.md.
+RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "0"))
 
 # --- Observability ---------------------------------------------------------
 # Everything here is off unless configured; see docs/OBSERVABILITY.md.

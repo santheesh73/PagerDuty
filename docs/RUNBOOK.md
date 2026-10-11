@@ -60,6 +60,7 @@ Copy `.env.example` to `.env` for local use (it is git-ignored). Compose passes 
 | `THROTTLE_LOGIN`, `THROTTLE_EVENTS` | `10/min`, `120/min` (per key) | rate limits |
 | `GUNICORN_WORKERS`, `CELERY_CONCURRENCY`, `CELERY_QUEUES` | `3`, `4`, all three queues | the compose files give `worker-escalations` `CELERY_QUEUES=escalations` |
 | `METRICS_TOKEN`, `HEARTBEAT_URL`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`/`GIT_SHA` | unset (off) | observability, see [OBSERVABILITY.md](OBSERVABILITY.md): `/metrics` is a 404 without a token |
+| `BACKUP_*`, `RETENTION_DAYS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TX_TIMEOUT_MS`, `DB_CONN_MAX_AGE` | see DATA_SAFETY.md | backups (the compose `backup` service), retention (0 = keep everything), database session limits |
 | `SECURE_COOKIES`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` | `1`, `1`, `0` in code | the prod compose sets the first two to `0` for plain-HTTP `localhost`; **set them for real deployments** (HSTS is sticky, see DECISIONS #18) |
 
 ## Everyday commands
@@ -79,6 +80,10 @@ Read logs for one service: `docker compose logs -f --tail=200 worker-escalations
 Reset everything (**destroys data**): `docker compose down -v`. Reset only the demo data: `make reseed`.
 
 ## Backup and restore
+
+The prod-like stack runs a `backup` service (verified `pg_dump`, rotation, optional S3 upload) and
+`make backup-drill` proves a restore end to end: see [DATA_SAFETY.md](DATA_SAFETY.md) for RPO/RTO, the
+restore procedure and migration rules. The quick manual form:
 
 `make db-backup` runs `pg_dump -Fc` inside the `db` container. `make db-restore FILE=...` pipes a dump into
 `pg_restore --clean --if-exists`. Verified: a dump restored into a scratch database had identical row counts
