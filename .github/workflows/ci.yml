@@ -45,12 +45,22 @@ jobs:
           enable-cache: true
       - run: uv python install 3.13
       - run: uv sync --frozen
+      # The backup-script tests run the real pg_dump, which must match the server's major version.
+      - name: Install the PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
       - name: Lint
         run: uv run ruff check . && uv run ruff format --check .
       - name: Type check
         run: uv run mypy .
       - name: Migrations are up to date
         run: uv run python manage.py makemigrations --check --dry-run
+      - name: Migrations are safe to run on a live database
+        run: DJANGO_SETTINGS_MODULE=config.settings.lint uv run python manage.py lintmigrations
       - name: OpenAPI schema is valid and committed
         run: |
           uv run python manage.py spectacular --file /tmp/openapi.yaml --validate
@@ -96,6 +106,14 @@ jobs:
           push: false
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
+      - name: Backup image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ops/backup/Dockerfile
+          push: false
+          cache-from: type=gha,scope=backup
+          cache-to: type=gha,mode=max,scope=backup
       - name: Frontend (prod target)
         uses: docker/build-push-action@v6
         with:
@@ -188,3 +206,45 @@ jobs:
         run: |
           SECRET_KEY=x METRICS_TOKEN=t GRAFANA_PASSWORD=p \
             docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml config -q
+
+  backup-drill:
+    name: Backup drill (backup · restore · compare · boot API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pulse
+          POSTGRES_PASSWORD: pulse
+          POSTGRES_DB: pulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pulse" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://pulse:pulse@localhost:5432/pulse
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+        working-directory: backend
+      # pg_dump refuses to dump a newer server, so the client must be the server's major version.
+      - name: Install the PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: make backup-drill
+        run: ./scripts/backup_drill.sh

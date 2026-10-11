@@ -32,6 +32,7 @@ dev = [
     "django-stubs[compatible-mypy]==6.0.9",
     "djangorestframework-stubs==3.16.9",
     "celery-types==0.26.0",
+    "django-migration-linter==6.0.0",
 ]
 
 [tool.uv]
@@ -51,6 +52,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S105", "S106", "DTZ001", "B008"]
 "config/settings/*.py" = ["S105"]
+"**/tests/test_backup_scripts.py" = ["S603", "S607"]  # runs the real shell scripts and pg tools
 "**/management/commands/*.py" = ["S311", "S101"]  # demo data uses non-crypto randomness on purpose
 
 [tool.mypy]

@@ -403,3 +403,29 @@ before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line m
 - New dependencies: `sentry-sdk` (required to report errors at all; imported only when a DSN is set),
   `prometheus-client` (the standard exposition format and multiprocess aggregation), `@sentry/react`
   (separate chunk, absent from the bundle unless `VITE_SENTRY_DSN` is set at build).
+
+
+## Data safety (production-readiness, phase 2)
+
+- **Backups are verified before they are trusted, and rotation follows verification.** `backup.sh`
+  reads its own dump back and only then prunes older ones. A job that fails every night leaves the last
+  good dump alone and stays silent toward the dead-man's switch, which is how the failure gets noticed.
+- **The drill compares sequences, not just rows.** A restored database with correct rows and a stale
+  sequence would hand out duplicate incident numbers on the first new alert; the drill ends by
+  creating one.
+- **No point-in-time recovery was built.** WAL archiving is operational machinery that a managed
+  Postgres already does better; the honest position is RPO = one backup interval and a pointer to PITR
+  if that is not enough.
+- **Expand/contract is the migration rule, enforced mechanically where possible.** Dropping or
+  renaming a column in the same release that stops using it breaks the old code during a rolling
+  deploy. `django-migration-linter` (dev dependency, justified: it is the maintained tool for exactly
+  this check and runs only in CI) fails the build on the destructive operations.
+- **`migrate_safely` instead of trusting `migrate` to be re-entrant.** Reproduced the failure first
+  (3 of 4 concurrent runs crash on a fresh database), then serialised with `pg_advisory_lock`.
+- **Retention is opt-in and conservative.** Default keeps everything; only *resolved* incidents past the
+  cutoff are removed, never open ones; alerts are deleted explicitly because their FK is `SET_NULL`.
+- **Timeouts are deliberate and configurable.** 15 s statements, 5 s lock waits, 60 s idle-in-transaction.
+  The idle limit is off in the test settings because pytest-django holds a transaction open for a whole
+  test. All three can be set to 0 for poolers that reject startup options.
+- **Celery `visibility_timeout` is an explicit 3600 s** rather than an inherited default, with the
+  reasoning written next to it: recovery of a dead worker's page does not depend on it.
