@@ -41,3 +41,7 @@ doctor-logs.txt
 .deploy/
 !.env.example
 !deploy/.env.production.example
+
+# Reports scripts/readme_numbers.py measures from
+pytest.xml
+vitest.json

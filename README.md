@@ -15,7 +15,7 @@
 
 ## What this guarantees
 
-Seventeen written guarantees, each with the mechanism that enforces it and the test that proves it, in [`docs/INVARIANTS.md`](docs/INVARIANTS.md). The ones that matter most:
+<!-- n:invariants -->19<!-- /n --> written guarantees, each with the mechanism that enforces it and the test that proves it, in [`docs/INVARIANTS.md`](docs/INVARIANTS.md). The ones that matter most:
 
 - **An alert becomes exactly one incident**, however many arrive at once (I1).
 - **A page is never sent twice, and never lost**: not on a duplicated task, a racing sweeper, a dead broker or a worker that dies mid-write (I4, I5).
@@ -33,7 +33,7 @@ Seventeen written guarantees, each with the mechanism that enforces it and the t
 - **Idempotent paging.** The ETA task and the safety-net sweeper are *designed* to race. A guarded `SELECT … FOR UPDATE SKIP LOCKED` lets exactly one win, and unique notification keys mean a retry can never page twice.
 - **DST-correct rotations.** A 09:00 handoff stays at 09:00 local through spring-forward and fall-back (including a handoff inside the non-existent 02:30 hour). The resolver is pure functions with no database, tested exhaustively.
 - **Policy snapshots.** Editing an escalation policy never rewires an incident already in flight, but schedule targets still follow the live rotation.
-- **A frozen-time test suite.** 240 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
+- **A frozen-time test suite.** <!-- n:backend_tests -->653<!-- /n --> backend tests (<!-- n:coverage -->95<!-- /n -->% statement and branch coverage) and <!-- n:frontend_tests -->42<!-- /n --> frontend tests drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
 
 ## Quick start
 
@@ -154,6 +154,7 @@ make e2e             # Playwright: the alert→resolve journey, plus an axe audi
 
 - **Property tests** (`schedules/tests/test_oncall_properties.py`): one responder at any instant, rendered shifts partition the window and agree with `on_call`, handoffs land on local time across DST in six zones, rotation fairness, determinism. They found a real fall-back bug.
 - **Simulator** (`manage.py simulate --seed N`): real code, real Postgres, a virtual clock, injected faults, and `core/invariants.py` after every operation. The fixed seed runs in CI; any failure prints the seed and the command that reproduces it.
+- **Mutation testing** (`scripts/mutate.py`): <!-- n:mutations -->74<!-- /n --> deliberate breakages of critical lines, among them team scoping on every list, `SKIP LOCKED`, the dedup index, signature and secret checks, the MFA gate and the counters' expiry. A test has to catch each one. The one survivor, `skip-locked`, is documented as behaviour-equivalent.
 
 - **On-call resolver** (no DB): handoff instants, DST forward/back in New York and London, weekly/custom rotations, override precedence, layer priority, empty layers, shift rendering.
 - **Escalation engine**: level advance, loops, exhaustion, ack stops it, ETA + sweeper double-fire pages once (plus a 4-thread race), no-responder skip, policy edits don't touch open incidents, unack restarts the timer, low urgency never escalates, debug → dry run, sweeper recovery after a lost ETA message, broker outage doesn't fail ingest.
@@ -161,6 +162,8 @@ make e2e             # Playwright: the alert→resolve journey, plus an axe audi
 - **State machine**: every allowed and forbidden transition, exactly one timeline event per action, `first_response_at` set once and never by source events.
 - **API**: permissions per role, validation and limits, cursor pagination, the error envelope, Events API auth and throttling (including failing open without Redis).
 - **Frontend**: API client and CSRF, optimistic acknowledge and rollback on 409, keyboard shortcuts, the policy editor's payload and limits, the shift timeline including DST-length days.
+
+The numbers in this README are measured, not typed: CI fails if they drift (`scripts/readme_numbers.py`, `make readme-numbers`).
 
 Tests are named after behaviour (`test_ack_stops_escalation`, `test_policy_edit_does_not_change_open_incident`), so a regression fails a test that explains itself.
 

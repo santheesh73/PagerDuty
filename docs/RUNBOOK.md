@@ -76,7 +76,15 @@ make db-backup     # backups/pulse-<time>.dump                  make db-restore 
 make doctor        # prove the whole stack, ~8 minutes
 make doctor-demo   # the same proof for the one-container demo (no Redis, no Celery)
 make chaos-redis   # wipe Redis mid-incident and assert nothing is lost
+make readme-numbers  # re-measure the README's test counts, coverage and badge (CI fails if they drift)
 ```
+
+Re-record the README's GIF and the social preview from the real app after a UI change: start a seeded stack on
+<http://localhost:8080> (`docker compose -f docker-compose.demo.yml up --build -d`, or the prod-like
+stack with `SEED_DEMO=1`), then `TICK_SECRET=<its secret> ./scripts/record_demo.sh` (the secret is
+only needed for the demo stack, which has no Beat). It needs Node, ffmpeg and a Playwright Chromium
+(`cd e2e && npm ci && npx playwright install chromium`); one take is about two minutes, most of it
+waiting for the one-minute escalation.
 
 Read logs for one service: `docker compose logs -f --tail=200 worker-escalations`. Logs are JSON with a
 `request_id` that also appears in the Celery task logs the request caused.
