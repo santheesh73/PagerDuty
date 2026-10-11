@@ -19,6 +19,7 @@
     "gen:api": "openapi-typescript ../backend/openapi.yaml -o src/api/schema.d.ts && prettier --write src/api/schema.d.ts"
   },
   "dependencies": {
+    "@sentry/react": "11.6.0",
     "@tanstack/react-query": "5.104.1",
     "clsx": "2.1.1",
     "lucide-react": "1.55.0",

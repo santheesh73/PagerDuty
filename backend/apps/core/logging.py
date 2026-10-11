@@ -37,6 +37,16 @@ class RequestIDFilter(logging.Filter):
         return True
 
 
+class RedactRequestFilter(logging.Filter):
+    """Django attaches the whole request to `django.request` records; its repr includes the
+    query string, which can carry keys. The message already names the path, so drop it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if hasattr(record, "request"):
+            record.request = None
+        return True
+
+
 @before_task_publish.connect
 def _attach_request_id(headers: dict | None = None, **_: Any) -> None:
     if headers is not None and (rid := get_request_id()):

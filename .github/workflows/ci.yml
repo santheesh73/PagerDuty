@@ -170,3 +170,21 @@ jobs:
         with:
           name: doctor-logs
           path: doctor-logs.txt
+
+  ops-rules:
+    name: Ops (promtool alert rules · Grafana JSON · compose overlay)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Alert rules and Prometheus config are valid
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/ops:/ops:ro" prom/prometheus:v3.5.0 check rules /ops/alerts.yml
+          # The scrape config references a secret file that only exists inside the stack.
+          docker run --rm --entrypoint promtool -v "$PWD/ops:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
+            check config --syntax-only /etc/prometheus/prometheus.yml
+      - name: Dashboard is valid JSON
+        run: python3 -m json.tool ops/grafana/pulse.json >/dev/null
+      - name: Observability compose overlay resolves
+        run: |
+          SECRET_KEY=x METRICS_TOKEN=t GRAFANA_PASSWORD=p \
+            docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml config -q
