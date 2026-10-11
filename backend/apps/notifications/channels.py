@@ -5,6 +5,8 @@ from typing import Protocol
 from django.conf import settings
 from django.core.mail import send_mail
 
+from apps.core.text import one_line
+
 from .models import Notification
 
 
@@ -29,7 +31,7 @@ class EmailChannel:
         url = f"{settings.FRONTEND_URL}/incidents/{incident.pk}"
         try:
             send_mail(
-                subject=f"[Pulse] #{incident.number} {incident.title}",
+                subject=f"[Pulse] #{incident.number} {one_line(incident.title)}",
                 message=(
                     f"You are being paged for incident #{incident.number} on "
                     f"{incident.service.name} ({incident.urgency} urgency).\n\n"

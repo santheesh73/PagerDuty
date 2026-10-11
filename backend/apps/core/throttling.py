@@ -19,8 +19,13 @@ class FailOpenMixin:
     def allow_request(self, request: Request, view: APIView) -> bool:
         try:
             return super().allow_request(request, view)  # type: ignore[misc]
-        except Exception:
-            logger.warning("throttle backend unavailable; allowing request", exc_info=True)
+        except Exception as exc:
+            # One line, no traceback: with Redis down this fires on every request.
+            logger.warning(
+                "throttle backend unavailable (%s: %s); allowing request",
+                type(exc).__name__,
+                str(exc)[:120],
+            )
             return True
 
 

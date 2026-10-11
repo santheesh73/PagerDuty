@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 STUCK_AFTER = timedelta(minutes=2)
+# How long a worker may hold a notification while sending before another may take over.
+# Must stay above EMAIL_TIMEOUT and below STUCK_AFTER, so a dead worker's page is retried by
+# the next sweep.
+CLAIM_TTL = timedelta(seconds=60)
 
 
 def idempotency_key(
@@ -85,8 +89,46 @@ def page(
 
 
 def deliver(notification_id: int, *, now: datetime | None = None) -> Notification | None:
-    """Send one notification. Safe to call any number of times: only a pending row sends."""
+    """Send one notification. Safe to call any number of times: only a pending row sends.
+
+    Three short steps so no database lock is held while we wait on SMTP:
+
+    1. *claim* (row locked): apply the guards, count the attempt and stamp `claimed_at`.
+       Exactly one concurrent caller wins; the rest see a fresh claim and return.
+    2. *send*, with no transaction open.
+    3. *settle* (row locked): record sent, or the failure and whether to retry.
+
+    A worker that dies between 1 and 3 leaves a claim that expires after `CLAIM_TTL`; the
+    next delivery takes over, and the dead try still counts toward `MAX_ATTEMPTS`.
+    """
     now = now or timezone.now()
+    notification, claimed = _claim(notification_id, now)
+    if not claimed or notification is None:
+        return notification
+
+    error: Exception | None = None
+    try:
+        CHANNELS[notification.channel].send(notification)
+    except Exception as exc:
+        # Every failure a channel raises must count as an attempt. Catching only
+        # ChannelError let anything else (a bad header, an unknown channel key) escape
+        # before `attempts` was committed, so MAX_ATTEMPTS could never trip and
+        # `redispatch_stuck` re-drove the same poison row every sweep, forever.
+        error = exc
+        if not isinstance(exc, ChannelError):
+            logger.exception(
+                "notification channel raised an unexpected error",
+                extra={"notification_id": notification.pk, "channel": notification.channel},
+            )
+
+    settled = _settle(notification.pk, error, now)
+    if settled.status == Notification.Status.PENDING:
+        # Fell out of the transaction so the attempt count committed; let Celery retry.
+        raise ChannelError(settled.last_error)
+    return settled
+
+
+def _claim(notification_id: int, now: datetime) -> tuple[Notification | None, bool]:
     with transaction.atomic():
         notification = (
             Notification.objects.select_for_update(of=("self",))
@@ -95,72 +137,82 @@ def deliver(notification_id: int, *, now: datetime | None = None) -> Notificatio
             .first()
         )
         if notification is None or notification.status != Notification.Status.PENDING:
-            return notification
+            return notification, False
 
         incident = notification.incident
         if incident.status == Status.RESOLVED:
             # C1: the page was queued before the incident closed (broker outage, retries).
             notification.status = Notification.Status.CANCELLED
             notification.save(update_fields=["status", "updated_at"])
-            return notification
+            return notification, False
         if incident.service.mode == Service.Mode.DEBUG:
             # Mode switched to debug after the row was created: still never send.
             notification.status = Notification.Status.DRY_RUN
             notification.save(update_fields=["status", "updated_at"])
-            return notification
+            return notification, False
+        if notification.claimed_at and now - notification.claimed_at < CLAIM_TTL:
+            return notification, False  # another worker is sending it right now
+        if notification.attempts >= MAX_ATTEMPTS:
+            # Earlier workers took their claims and died before settling.
+            _fail(notification, "worker died while sending")
+            return notification, False
 
         notification.attempts += 1
-        try:
-            CHANNELS[notification.channel].send(notification)
-        except Exception as exc:
-            # Every failure a channel raises must count as an attempt. Catching only
-            # ChannelError let anything else (a bad header, an unknown channel key)
-            # escape before `attempts` was committed, so MAX_ATTEMPTS could never trip
-            # and `redispatch_stuck` re-drove the same poison row every sweep, forever.
-            if isinstance(exc, ChannelError):
-                notification.last_error = str(exc)[:2000]
-            else:
-                # Not a declared transient failure: keep the type so the row says what broke.
-                notification.last_error = f"{type(exc).__name__}: {exc}"[:2000]
-                logger.exception(
-                    "notification channel raised an unexpected error",
-                    extra={
-                        "notification_id": notification.pk,
-                        "channel": notification.channel,
-                    },
-                )
-            if notification.attempts >= MAX_ATTEMPTS:
-                notification.status = Notification.Status.FAILED
-                notification.save(update_fields=["attempts", "last_error", "status", "updated_at"])
-                record(
-                    incident,
-                    EventType.NOTIFICATION_FAILED,
-                    user_id=notification.user_id,
-                    channel=notification.channel,
-                    attempts=notification.attempts,
-                    message=f"Could not notify {notification.user} via {notification.channel}",
-                )
-                logger.error(
-                    "notification failed permanently",
-                    extra={"incident_id": incident.pk, "notification_id": notification.pk},
-                )
-                return notification
-            notification.save(update_fields=["attempts", "last_error", "updated_at"])
-            # Fall out of the atomic block so the attempt count commits, then raise below
-            # to let Celery retry with backoff.
-        else:
+        notification.claimed_at = now
+        notification.save(update_fields=["attempts", "claimed_at", "updated_at"])
+        return notification, True
+
+
+def _settle(notification_id: int, error: Exception | None, now: datetime) -> Notification:
+    with transaction.atomic():
+        notification = (
+            Notification.objects.select_for_update(of=("self",))
+            .select_related("incident", "user")
+            .get(pk=notification_id)
+        )
+        notification.claimed_at = None
+        if error is None:
             notification.status = Notification.Status.SENT
             notification.sent_at = now
-            notification.save(update_fields=["attempts", "status", "sent_at", "updated_at"])
+            notification.save(update_fields=["status", "sent_at", "claimed_at", "updated_at"])
             record(
-                incident,
+                notification.incident,
                 EventType.NOTIFIED,
                 user_id=notification.user_id,
                 channel=notification.channel,
-                message=f"Notified {notification.user} via {notification.get_channel_display()}",
+                message=(f"Notified {notification.user} via {notification.get_channel_display()}"),
             )
             return notification
-    raise ChannelError(notification.last_error)
+        if isinstance(error, ChannelError):
+            notification.last_error = str(error)[:2000]
+        else:
+            # Not a declared transient failure: keep the type so the row says what broke.
+            notification.last_error = f"{type(error).__name__}: {error}"[:2000]
+        if notification.attempts >= MAX_ATTEMPTS:
+            _fail(notification, notification.last_error)
+            return notification
+        notification.save(update_fields=["last_error", "claimed_at", "updated_at"])
+        return notification
+
+
+def _fail(notification: Notification, reason: str) -> None:
+    notification.status = Notification.Status.FAILED
+    notification.claimed_at = None
+    if not notification.last_error:
+        notification.last_error = reason
+    notification.save(update_fields=["status", "claimed_at", "last_error", "updated_at"])
+    record(
+        notification.incident,
+        EventType.NOTIFICATION_FAILED,
+        user_id=notification.user_id,
+        channel=notification.channel,
+        attempts=notification.attempts,
+        message=f"Could not notify {notification.user} via {notification.channel}",
+    )
+    logger.error(
+        "notification failed permanently",
+        extra={"incident_id": notification.incident_id, "notification_id": notification.pk},
+    )
 
 
 def redispatch_stuck(*, now: datetime | None = None, limit: int = 500) -> int:

@@ -128,6 +128,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "EXCEPTION_HANDLER": "apps.core.errors.exception_handler",
+    # How many reverse proxies we trust to append to X-Forwarded-For. DRF then reads the
+    # client address that many entries from the right, so a client-sent prefix can't pick
+    # its own throttle bucket. Unset (None) trusts the whole header: only right when
+    # nothing sits in front of Django. The compose files set 1 (their nginx).
+    "NUM_PROXIES": int(os.environ["NUM_PROXIES"]) if os.environ.get("NUM_PROXIES") else None,
     "DEFAULT_THROTTLE_RATES": {
         "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
         "events": os.environ.get("THROTTLE_EVENTS", "120/min"),
@@ -187,8 +192,28 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     },
 }
 
+
 # --- Email -----------------------------------------------------------------
-EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+def _env_bool(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes", "on"}
+
+
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+# Setting a host means "send real mail"; with none, pages are only printed to the log, which is
+# right for local dev but means nobody is emailed. An explicit EMAIL_BACKEND always wins.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST
+    else "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587" if _env_bool("EMAIL_USE_TLS") else "25"))
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS")
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+# Seconds. Without one, a blackholed SMTP host would pin a worker slot until the OS gave up.
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "pulse@localhost")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 

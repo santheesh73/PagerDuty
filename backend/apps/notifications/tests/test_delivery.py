@@ -114,3 +114,24 @@ def test_a_page_queued_before_resolution_is_never_sent_after_it(open_incident: I
     assert row is not None
     assert row.status == Notification.Status.CANCELLED
     assert mail.outbox == []
+
+
+def test_a_multi_line_summary_still_reaches_the_inbox_by_email(service, trigger) -> None:
+    """Alertmanager and Datadog templates emit newlines; a header may not contain one."""
+    result = trigger(service, "multi", summary="Disk full\non db-1\r\n(95%)")
+    incident = Incident.objects.get(pk=result.incident_id)
+    assert incident.title == "Disk full on db-1 (95%)"
+
+    for row in Notification.objects.filter(incident=incident, channel="email"):
+        assert deliver(row.pk).status == Notification.Status.SENT
+    assert mail.outbox
+    assert all("\n" not in m.subject and "\r" not in m.subject for m in mail.outbox)
+
+
+def test_the_email_subject_is_one_line_even_for_a_title_stored_before_the_fix(
+    open_incident: Incident,
+) -> None:
+    Incident.objects.filter(pk=open_incident.pk).update(title="Legacy\ntitle\twith  gaps")
+    row = email_row(open_incident)
+    assert deliver(row.pk).status == Notification.Status.SENT
+    assert mail.outbox[0].subject == f"[Pulse] #{open_incident.number} Legacy title with gaps"

@@ -1,5 +1,7 @@
 import pytest
+from django.conf import settings
 from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -69,6 +71,40 @@ def test_login_is_throttled(api_client: APIClient, people: Paging) -> None:
         for _ in range(11)
     ]
     assert codes[-1] == 429
+
+
+def _attempts_with_forged_forwarded_for(api_client: APIClient, count: int) -> list[int]:
+    """Every attempt arrives from the same real address (the proxy appended it last) but
+    carries a different client-supplied prefix, as an attacker rotating the header would."""
+    return [
+        api_client.post(
+            "/api/v1/auth/login/",
+            {"email": "x@y.z", "password": "bad"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=f"10.9.8.{i}, 203.0.113.7",
+        ).status_code
+        for i in range(count)
+    ]
+
+
+def test_a_forged_forwarded_for_prefix_does_not_reset_the_login_throttle(
+    api_client: APIClient,
+) -> None:
+    rest = {**settings.REST_FRAMEWORK, "NUM_PROXIES": 1}  # one trusted proxy: our nginx
+    with override_settings(REST_FRAMEWORK=rest):
+        codes = _attempts_with_forged_forwarded_for(api_client, 12)
+    assert codes[-1] == 429
+
+
+def test_num_proxies_is_configurable_from_the_environment(monkeypatch) -> None:
+    import importlib
+
+    from config.settings import base
+
+    monkeypatch.setenv("NUM_PROXIES", "2")
+    assert importlib.reload(base).REST_FRAMEWORK["NUM_PROXIES"] == 2
+    monkeypatch.delenv("NUM_PROXIES")
+    assert importlib.reload(base).REST_FRAMEWORK["NUM_PROXIES"] is None
 
 
 def test_anonymous_requests_get_the_error_envelope(api_client: APIClient) -> None:
