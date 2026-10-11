@@ -24,6 +24,7 @@ dev = [
     "pytest-cov==7.1.0",
     "factory-boy==3.3.3",
     "time-machine==3.5.1",
+    "hypothesis==6.168.5",
     "ruff==0.17.0",
     "mypy==2.3.1",
     "django-stubs[compatible-mypy]==6.0.9",
