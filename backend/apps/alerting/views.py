@@ -1,5 +1,3 @@
-import hmac
-
 from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -7,6 +5,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.catalog import actions as catalog_actions
 from apps.catalog.models import Service
 from apps.core import limits, metrics
 from apps.core.errors import DomainError
@@ -85,12 +84,9 @@ class EventsView(APIView):
 
     @staticmethod
     def _service_for(routing_key: str) -> Service:
-        service = (
-            Service.objects.select_related("escalation_policy")
-            .filter(integration_key=routing_key)
-            .first()
-        )
-        # Constant-time compare on the hit path; the lookup itself is by unique index.
-        if service is None or not hmac.compare_digest(service.integration_key, routing_key):
+        # Looked up by SHA-256 of the key: the database never sees or stores the key itself, so
+        # there is no plaintext comparison to time.
+        service = catalog_actions.service_for_key(routing_key)
+        if service is None:
             raise InvalidRoutingKey("Unknown routing key.")
         return service

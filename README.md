@@ -120,6 +120,7 @@ Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing mo
 | **Incidents** | One transition table incl. **unacknowledge**, assign/reassign, notes, manual escalate, full timeline, filters and search |
 | **Escalation policies** | Ordered levels, per-level delay, user or schedule targets, 0–3 loops, policy snapshot frozen at open |
 | **On-call schedules** | Daily / weekly / custom layers, local handoff time, IANA zone, layer priority, overrides, "who's on call now", rendered shift timeline |
+| **Security** | TOTP MFA with backup codes (required for admins in production), password reset, per-account lockout, session list/revoke, append-only audit log, hashed integration keys with rotation grace, CSP and HSTS ([SECURITY_MODEL.md](docs/SECURITY_MODEL.md)). No SSO/OIDC |
 | **Notifications** | In-app inbox, email, SMS and voice (Twilio, opt-in) and signed webhooks (Slack/Teams-compatible, SSRF-guarded); personal notification rules with delayed steps; signed one-time acknowledge/resolve links; retries, idempotency keys, dry-run in debug mode. SMS/voice are verified against a fake Twilio, **not a live carrier** ([CHANNELS.md](docs/CHANNELS.md)) |
 | **Analytics** | **Time to first response** (headline), MTTA, MTTR, daily volume, noisiest services, escalation rate |
 

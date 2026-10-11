@@ -19,6 +19,7 @@ from apps.accounts.models import User
 from apps.core import limits
 from apps.core.throttling import FailOpenMixin
 from apps.core.views import actor
+from apps.security import audit
 
 from . import actions, providers
 from .channels import unavailable_reason
@@ -130,6 +131,7 @@ class ContactView(APIView):
                 NotificationRule.objects.filter(
                     user=actor(request), channel=Notification.Channel.WEBHOOK
                 ).update(enabled=False)
+        audit.record("contact.updated", request=request, fields=sorted(data))
         body = ContactSerializer.of(contact)
         if secret:
             body["webhook_secret"] = secret
@@ -145,6 +147,7 @@ class RotateWebhookSecretView(APIView):
                 raise serializers.ValidationError({"webhook_url": "Set a webhook URL first."})
             contact.webhook_secret = secrets.token_urlsafe(32)
             contact.save(update_fields=["webhook_secret", "updated_at"])
+        audit.record("contact.webhook_secret_rotated", request=request)
         return Response({"webhook_secret": contact.webhook_secret})
 
 
@@ -208,6 +211,8 @@ class VerifyPhoneView(APIView):
                 contact.phone_code_attempts = 0
                 contact.save()
                 result = ("ok", contact)
+        if result[0] == "ok":
+            audit.record("contact.phone_verified", request=request)
         if result[0] == "invalid":
             raise serializers.ValidationError({"code": "That code is not right."})
         return Response(ContactSerializer.of(result[1]))

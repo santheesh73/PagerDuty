@@ -25,6 +25,7 @@ from apps.alerting.models import Alert
 from apps.incidents.models import Incident
 from apps.notifications.models import Notification, NotificationRule
 from apps.schedules.models import ScheduleOverride
+from apps.security.models import AuditEvent, SessionRecord
 from tests.factories import (
     AlertFactory,
     IncidentFactory,
@@ -49,9 +50,16 @@ EXEMPT = {
     "api/v1/auth/login/": "credentials endpoint",
     "api/v1/auth/logout/": "ends the caller's own session",
     "api/v1/me/": "the caller's own profile; mass-assignment is tested in the accounts tests",
+    "api/v1/auth/mfa/": "second sign-in step; acts only on the caller's own pending session",
+    "api/v1/auth/password-reset/": "always 204; tested for enumeration in security tests",
+    "api/v1/auth/password-reset/confirm/": "token-authenticated; tested in security tests",
+    "api/v1/csp-report/": "accepts browser reports, stores nothing",
 }
 
 SKIP_METHODS = {"options", "head", "trace"}
+# POSTs that act only on the caller's own account, so succeeding is correct; the snapshot check
+# below still proves they changed nothing of anyone else's.
+SELF_SCOPED_POSTS = ("read-all/", "me/mfa/setup/", "me/sessions/revoke-others/")
 
 
 @dataclass(frozen=True)
@@ -120,6 +128,10 @@ def world():
     )
     note_a = NotificationFactory(incident=incident_a, user=user_a)
     rule_a = NotificationRule.objects.create(user=user_a, channel="email", position=0)
+    audit_a = AuditEvent.objects.create(
+        action="service.updated", team_id=team_a.pk, actor_email=user_a.email, data={"name": MARKER}
+    )
+    session_a = SessionRecord.objects.create(session_key="tenant-a-session", user=user_a)
     # Team B has data of its own so "empty" can't be mistaken for "isolated".
     ServiceFactory(team=team_b, name="b-service")
 
@@ -138,6 +150,8 @@ def world():
             "alert": alert_a.pk,
             "notification": note_a.pk,
             "rule": rule_a.pk,
+            "audit": audit_a.pk,
+            "session": session_a.pk,
         },
         "team_a": team_a,
         "service_a": service_a,
@@ -159,7 +173,8 @@ def fill(template: str, ids: dict[str, int]) -> str:
         "schedules": {"pk": ids["schedule"], "schedule_pk": ids["schedule"]},
         "incidents": {"pk": ids["incident"]},
         "notifications": {"pk": ids["notification"]},
-        "me": {"pk": ids["rule"]},  # /me/notification-rules/{pk}/: personal, owned by user A
+        "me": {"pk": ids["session"] if "/sessions/" in template else ids["rule"]},
+        "audit-events": {"pk": ids["audit"]},
     }.get(resource)
     if values is None:
         raise AssertionError(f"no cross-team fixture for route {template!r}: classify it")
@@ -179,6 +194,8 @@ def snapshot() -> dict[str, object]:
         "alerts": Alert.objects.count(),
         "overrides": ScheduleOverride.objects.count(),
         "notifications": list(Notification.objects.values_list("pk", "read_at")),
+        "sessions": list(SessionRecord.objects.values_list("pk", flat=True)),
+        "audit": AuditEvent.objects.filter(data__name=MARKER).count(),
     }
 
 
@@ -214,6 +231,8 @@ def test_every_route_is_classified() -> None:
                 "alert",
                 "notification",
                 "rule",
+                "audit",
+                "session",
             ),
             1,
         )
@@ -229,6 +248,7 @@ def test_every_route_is_classified() -> None:
                 "incidents",
                 "notifications",
                 "me",
+                "audit-events",
                 "oncalls",
                 "analytics",
             }, f"unclassified collection route {route.template!r}"
@@ -268,9 +288,12 @@ def test_another_teams_data_is_unreachable(world, route: Route) -> None:
             }
             response = client.post(path, data=payload, format="json")
             assert response.status_code not in (200, 201, 202, 204) or route.template.endswith(
-                ("read-all/",)
+                SELF_SCOPED_POSTS
             ), f"POST {path} succeeded against another team: {response.content[:200]!r}"
-    assert snapshot() == before or route.template.endswith("read-all/")
+    after = snapshot()
+    if route.template.endswith("read-all/"):  # marks only the caller's own rows read
+        after["notifications"] = before["notifications"]
+    assert after == before, f"{route.template} changed another team's data"
 
 
 def test_analytics_only_counts_the_callers_teams(world) -> None:

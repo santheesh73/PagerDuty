@@ -12,15 +12,27 @@ from tests.factories import EscalationPolicyFactory
 pytestmark = pytest.mark.django_db
 
 
-def test_only_admins_see_the_integration_key(
+def test_the_key_is_never_readable_after_it_was_issued(
     api_client: APIClient, service: Service, people: Paging
 ) -> None:
     api_client.force_login(people.admin)
-    assert api_client.get(f"/api/v1/services/{service.pk}/").json()["integration_key"] == (
-        service.integration_key
-    )
+    body = api_client.get(f"/api/v1/services/{service.pk}/").json()
+    assert body["integration_key"] is None, "only a hash is stored; there is nothing to return"
+    assert body["integration_key_prefix"] == service.integration_key[:8]
     api_client.force_login(people.on_call)
-    assert api_client.get(f"/api/v1/services/{service.pk}/").json()["integration_key"] is None
+    body = api_client.get(f"/api/v1/services/{service.pk}/").json()
+    assert body["integration_key"] is None
+    assert body["integration_key_prefix"] is None
+
+
+def test_only_a_hash_of_the_key_is_stored(service: Service) -> None:
+    from django.db import connection
+
+    key = service.integration_key
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM catalog_service WHERE id = %s", [service.pk])
+        row = cursor.fetchone()
+    assert key not in [str(value) for value in row]
 
 
 def test_list_includes_open_incident_counts(
@@ -68,7 +80,9 @@ def test_rotate_key_is_admin_only(api_client: APIClient, service: Service, peopl
     assert api_client.post(f"/api/v1/services/{service.pk}/rotate-key/").status_code == 403
     api_client.force_login(people.admin)
     rotated = api_client.post(f"/api/v1/services/{service.pk}/rotate-key/").json()
+    assert len(rotated["integration_key"]) == 64
     assert rotated["integration_key"] != service.integration_key
+    assert rotated["previous_key_expires_at"] is not None
 
 
 def test_responders_can_send_a_test_alert_viewers_cannot(
@@ -114,3 +128,74 @@ def test_deleting_a_policy_in_use_is_a_conflict(
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "in_use"
     assert Service.objects.filter(pk=service.pk).exists()
+
+
+# --- rotation grace window ------------------------------------------------------------------------
+
+
+def _send(key: str) -> int:
+    return (
+        APIClient()
+        .post(
+            "/api/v1/events/",
+            {
+                "routing_key": key,
+                "event_action": "trigger",
+                "payload": {"summary": "x", "severity": "critical", "source": "t"},
+            },
+            format="json",
+        )
+        .status_code
+    )
+
+
+def test_after_rotation_both_keys_work_until_the_grace_window_ends(
+    service: Service, settings
+) -> None:
+    from datetime import timedelta
+
+    import time_machine
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from apps.catalog.actions import rotate_integration_key
+
+    cache.clear()
+    old = service.integration_key
+    assert old is not None
+    new = rotate_integration_key(service)
+    assert _send(old) == 202, "senders must not lose alerts while their config is updated"
+    assert _send(new) == 202
+    later = timezone.now() + timedelta(hours=settings.INTEGRATION_KEY_GRACE_HOURS, minutes=1)
+    with time_machine.travel(later, tick=False):
+        cache.clear()
+        assert _send(old) == 403
+        assert _send(new) == 202
+
+
+def test_rotating_twice_retires_the_oldest_key_at_once(service: Service) -> None:
+    from django.core.cache import cache
+
+    from apps.catalog.actions import rotate_integration_key
+
+    cache.clear()
+    first = service.integration_key
+    assert first is not None
+    second = rotate_integration_key(service)
+    third = rotate_integration_key(service)
+    assert _send(first) == 403
+    assert _send(second) == 202
+    assert _send(third) == 202
+
+
+def test_a_leaked_key_can_be_killed_immediately_with_no_grace(service: Service) -> None:
+    from datetime import timedelta
+
+    from django.core.cache import cache
+
+    cache.clear()
+    old = service.integration_key
+    assert old is not None
+    service.issue_key(grace=timedelta(0))
+    service.save()
+    assert _send(old) == 403

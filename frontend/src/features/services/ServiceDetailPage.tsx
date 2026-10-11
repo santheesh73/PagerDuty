@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import {
   Check,
   ChevronRight,
@@ -296,10 +296,16 @@ function ModeCard({ service, canEdit }: { service: Service; canEdit: boolean }) 
 
 function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: boolean }) {
   const rotate = useRotateKey(service.id);
-  const [revealed, setRevealed] = useState(false);
+  const location = useLocation();
+  // Only a hash is stored, so the full key exists in exactly one response: the one that created
+  // or rotated it. Keep it in this page's memory until the person navigates away.
+  const [issuedKey, setIssuedKey] = useState<string | null>(
+    (location.state as { issuedKey?: string } | null)?.issuedKey ?? null,
+  );
+  const [revealed, setRevealed] = useState(Boolean(issuedKey));
   const [copied, setCopied] = useState<"key" | "curl" | null>(null);
   const [confirm, setConfirm] = useState(false);
-  const key = service.integration_key;
+  const key = issuedKey;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const curl = `curl -X POST ${origin}/api/v1/events/ \\
   -H 'Content-Type: application/json' \\
@@ -347,32 +353,53 @@ function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: bool
             )}
           </div>
           {key ? (
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-2 p-1 pl-3">
-              <code className="min-w-0 flex-1 truncate font-mono text-xs">
-                {revealed ? key : `${key.slice(0, 6)}${"•".repeat(20)}${key.slice(-4)}`}
-              </code>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setRevealed((v) => !v)}
-                aria-label={revealed ? "Hide key" : "Show key"}
-                icon={revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void copy(key, "key")}
-                aria-label="Copy key"
-                icon={
-                  copied === "key" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />
-                }
-              />
-            </div>
+            <>
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-2 p-1 pl-3">
+                <code className="min-w-0 flex-1 truncate font-mono text-xs">
+                  {revealed ? key : `${key.slice(0, 6)}${"•".repeat(20)}${key.slice(-4)}`}
+                </code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setRevealed((v) => !v)}
+                  aria-label={revealed ? "Hide key" : "Show key"}
+                  icon={revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void copy(key, "key")}
+                  aria-label="Copy key"
+                  icon={
+                    copied === "key" ? (
+                      <Check className="size-3.5" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )
+                  }
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-warning-fg">
+                Copy it now: only a hash is stored, so this key can't be shown again.
+              </p>
+            </>
+          ) : isAdmin && service.integration_key_prefix ? (
+            <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
+              <code className="font-mono">{service.integration_key_prefix}…</code> · stored as a
+              hash, so it can't be shown again. Rotate to issue a new one.
+            </p>
           ) : (
             <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
-              Only team admins can see the key.
+              Only team admins can manage the key.
             </p>
           )}
+          {service.previous_key_expires_at &&
+            new Date(service.previous_key_expires_at) > new Date() && (
+              <p className="mt-1.5 text-xs text-muted">
+                The previous key keeps working until{" "}
+                {new Date(service.previous_key_expires_at).toLocaleString()}.
+              </p>
+            )}
         </div>
         <div>
           <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-muted">
@@ -408,7 +435,7 @@ function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: bool
         open={confirm}
         onClose={() => setConfirm(false)}
         title="Rotate integration key?"
-        description="The current key stops working immediately. Update your monitoring with the new one."
+        description="You'll see the new key once. The current key keeps working for 24 hours so you can update your monitoring."
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirm(false)}>
@@ -419,8 +446,9 @@ function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: bool
               loading={rotate.isPending}
               onClick={() =>
                 rotate.mutate(undefined, {
-                  onSuccess: () => {
+                  onSuccess: (rotated) => {
                     setConfirm(false);
+                    setIssuedKey(rotated.integration_key ?? null);
                     setRevealed(true);
                   },
                 })
@@ -432,7 +460,7 @@ function IntegrationCard({ service, isAdmin }: { service: Service; isAdmin: bool
         }
       >
         <p className="text-sm text-muted">
-          Alerts sent with the old key will be rejected with{" "}
+          After that, alerts sent with the old key are rejected with{" "}
           <code className="font-mono">invalid_routing_key</code>.
         </p>
       </Dialog>

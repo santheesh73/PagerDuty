@@ -456,3 +456,26 @@ before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line m
   `CONCURRENTLY` in a separate non-atomic migration, and `test_migration_0004.py` pins that SQL
   because the linter cannot tell a kept default from a dropped one (that one migration is on its
   ignore list, with the reason in `config/settings/lint.py`).
+
+
+## Security (production-readiness, phase 4)
+
+- **TOTP implemented in ~30 lines rather than a dependency**, pinned by the RFC 4226 and 6238 test
+  vectors. Each time step is accepted once (`last_used_step`), which most libraries leave to the caller.
+- **The password step does not authenticate.** It parks the user id in the session for five minutes;
+  only the code step calls `login()`. A half-finished sign-in therefore has no session to abuse.
+- **The Django admin's own login is replaced, not hardened.** Adding MFA to two login forms is twice the
+  surface; redirecting the admin to the app's sign-in reuses one path with lockout, MFA and audit.
+- **Per-account lockout on top of per-address throttling**, keyed on the attempted email whether or not
+  it exists. It makes targeted lockout possible (15 minutes), which is the usual price of stopping
+  distributed guessing; recorded here rather than hidden.
+- **The audit log is append-only in the database**, by trigger. A rule in application code would not
+  survive a bug, a shell session or a SQL injection through the app's role.
+- **Hashed integration keys broke the expand/contract rule on purpose.** The plaintext column is dropped
+  in the same release (migration 0003), because keeping working credentials for another release is the
+  risk being removed. The previous release cannot read keys after the migration, so this one deploys
+  with a stop-then-start (senders retry), not a rolling restart. A grace window covers rotations.
+- **OIDC/SSO is not built.** Done properly it needs account linking, just-in-time provisioning and a
+  decision about MFA (trust the IdP's or not); a half version would be worse than none.
+- **Found while doing it:** the nginx config never proxied `/a/`, so the one-tap acknowledge links added
+  in phase 3 would have served the SPA in the Docker stacks. Fixed, and `make doctor` now checks it.

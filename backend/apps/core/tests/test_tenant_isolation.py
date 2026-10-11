@@ -57,10 +57,10 @@ def test_other_team_service_denied(two_teams):
 
 def test_cannot_rotate_other_team_key(two_teams):
     client, _, _, svc_b = two_teams
-    before = svc_b.integration_key
+    before = svc_b.integration_key_hash
     assert client.post(f"/api/v1/services/{svc_b.pk}/rotate-key/").status_code in (403, 404)
     svc_b.refresh_from_db()
-    assert svc_b.integration_key == before, "LEAK: rotated another team's key"
+    assert svc_b.integration_key_hash == before, "LEAK: rotated another team's key"
 
 
 @pytest.mark.parametrize(

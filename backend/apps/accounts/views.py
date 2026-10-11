@@ -1,4 +1,9 @@
+import hashlib
+import logging
+
+from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.core.cache import cache
 from django.db.models import QuerySet
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
@@ -13,6 +18,8 @@ from rest_framework.views import APIView
 from apps.core.permissions import member_team_ids
 from apps.core.throttling import LoginThrottle
 from apps.core.views import actor
+from apps.security import audit, mfa
+from apps.security.views import start_pending
 
 from .models import Membership, Team, User
 from .serializers import (
@@ -23,22 +30,68 @@ from .serializers import (
     UserSummarySerializer,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _lockout_key(email: str) -> str:
+    return "login-fail:" + hashlib.sha256(email.encode()).hexdigest()[:32]
+
+
+def _locked_out(email: str) -> bool:
+    try:
+        return int(cache.get(_lockout_key(email)) or 0) >= settings.LOGIN_LOCKOUT_FAILURES
+    except Exception:
+        return False  # Redis down: the per-address throttle still applies
+
+
+def _count_failure(email: str) -> None:
+    try:
+        key = _lockout_key(email)
+        cache.add(key, 0, timeout=settings.LOGIN_LOCKOUT_SECONDS)
+        cache.incr(key)
+    except Exception:
+        logger.warning("login lockout counter unavailable")
+
+
+def _clear_failures(email: str) -> None:
+    try:
+        cache.delete(_lockout_key(email))
+    except Exception:
+        logger.warning("login lockout counter unavailable")
+
 
 @method_decorator(csrf_protect, name="dispatch")
 class LoginView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginThrottle]
 
-    @extend_schema(request=LoginSerializer, responses=MeSerializer)
+    @extend_schema(
+        request=LoginSerializer,
+        responses=MeSerializer,
+        description='Signs in, or answers `{"mfa_required": true}` when the account has '
+        "two-factor authentication: then POST the code to /auth/mfa/.",
+    )
     def post(self, request: Request) -> Response:
         payload = LoginSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        user = authenticate(
-            request,
-            username=payload.validated_data["email"].lower(),
-            password=payload.validated_data["password"],
-        )
+        email = payload.validated_data["email"].lower()
+        if _locked_out(email):
+            # Checked before the password, so a guesser learns nothing even with the right one.
+            audit.record("auth.login_locked", request=request, attempted_email=email)
+            return Response(
+                {
+                    "error": {
+                        "code": "too_many_attempts",
+                        "message": "Too many failed sign-ins for this account. Try again later.",
+                        "details": {},
+                    }
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        user = authenticate(request, username=email, password=payload.validated_data["password"])
         if user is None:
+            _count_failure(email)
+            audit.record("auth.login_failed", request=request, attempted_email=email)
             return Response(
                 {
                     "error": {
@@ -49,13 +102,19 @@ class LoginView(APIView):
                 },
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        _clear_failures(email)
+        if mfa.enabled(user):
+            start_pending(request, user)
+            return Response({"mfa_required": True})
         login(request, user)
+        audit.record("auth.login", request=request, actor=user, mfa=None)
         return Response(MeSerializer(user).data)
 
 
 class LogoutView(APIView):
     @extend_schema(request=None, responses={204: None})
     def post(self, request: Request) -> Response:
+        audit.record("auth.logout", request=request)
         logout(request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

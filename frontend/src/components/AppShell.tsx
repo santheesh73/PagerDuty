@@ -7,6 +7,8 @@ import {
   CalendarClock,
   LayoutDashboard,
   LogOut,
+  ScrollText,
+  ShieldCheck,
   Monitor,
   Moon,
   Siren,
@@ -208,6 +210,24 @@ function UserMenu() {
             ))}
           </div>
           <div className="my-1 border-t border-border" />
+          <Link
+            to="/settings/security"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted hover:bg-surface-2 hover:text-text"
+          >
+            <ShieldCheck className="size-4" aria-hidden /> Security
+          </Link>
+          {(me.is_staff || me.memberships.some((m) => m.role === "admin")) && (
+            <Link
+              to="/audit-log"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted hover:bg-surface-2 hover:text-text"
+            >
+              <ScrollText className="size-4" aria-hidden /> Audit log
+            </Link>
+          )}
           <button
             type="button"
             role="menuitem"

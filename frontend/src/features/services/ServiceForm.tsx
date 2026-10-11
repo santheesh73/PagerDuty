@@ -47,7 +47,9 @@ function ServiceForm({ open, onClose, service }: Props) {
       {
         onSuccess: (saved) => {
           onClose();
-          if (!service) navigate(`/services/${saved.id}`);
+          // The key is returned once, in this response: hand it to the detail page to show.
+          if (!service)
+            navigate(`/services/${saved.id}`, { state: { issuedKey: saved.integration_key } });
         },
       },
     );

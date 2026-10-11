@@ -15,6 +15,7 @@ from rest_framework.serializers import BaseSerializer
 from apps.accounts.models import User
 from apps.core.permissions import IsTeamMember, Role
 from apps.core.views import require_role, scope_to_teams
+from apps.security.audit import AuditedMixin
 
 from .models import Schedule, ScheduleOverride
 from .oncall import on_call_with_source
@@ -39,7 +40,9 @@ def _parse_instant(request: Request, name: str, default: datetime) -> datetime:
     return value if timezone.is_aware(value) else timezone.make_aware(value, UTC)
 
 
-class ScheduleViewSet(viewsets.ModelViewSet):
+class ScheduleViewSet(AuditedMixin, viewsets.ModelViewSet):
+    audit_name = "schedule"
+
     serializer_class = ScheduleSerializer
     permission_classes = [IsTeamMember]
     filterset_fields = ["team"]
@@ -87,7 +90,9 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         return Response(ShiftSerializer(rows, many=True).data)
 
 
-class OverrideViewSet(viewsets.ModelViewSet):
+class OverrideViewSet(AuditedMixin, viewsets.ModelViewSet):
+    audit_name = "schedule_override"
+
     """/schedules/{schedule_pk}/overrides/ — members read, team admins write."""
 
     serializer_class = OverrideSerializer

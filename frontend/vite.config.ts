@@ -20,6 +20,7 @@ export default defineConfig({
       "/api": { target: apiTarget, changeOrigin: false },
       "/admin": { target: apiTarget, changeOrigin: false },
       "/static": { target: apiTarget, changeOrigin: false },
+      "/a/": { target: apiTarget, changeOrigin: false },
     },
   },
   test: {

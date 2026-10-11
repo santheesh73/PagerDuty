@@ -5,6 +5,7 @@ log and let the request through: dropping an alert because the rate limiter is d
 be far worse than briefly not rate limiting.
 """
 
+import hashlib
 import logging
 from typing import Any
 
@@ -44,4 +45,6 @@ class RoutingKeyThrottle(FailOpenMixin, SimpleRateThrottle):
         if not isinstance(key, str) or not key:
             return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
         # Hash-free is fine: the cache is server-side, but never log the raw key.
-        return self.cache_format % {"scope": self.scope, "ident": f"rk:{key[:64]}"}
+        # A digest, so raw keys never become Redis key names (visible to anyone with redis-cli).
+        digest = hashlib.sha256(str(key).encode()).hexdigest()[:32]
+        return self.cache_format % {"scope": self.scope, "ident": f"rk:{digest}"}

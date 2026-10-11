@@ -23,7 +23,11 @@ class ServiceSerializer(serializers.ModelSerializer):
     escalation_policy = serializers.PrimaryKeyRelatedField(queryset=EscalationPolicy.objects.all())
     escalation_policy_name = serializers.CharField(source="escalation_policy.name", read_only=True)
     integration_key = serializers.SerializerMethodField(
-        help_text="Only team admins see the key; everyone else gets null."
+        help_text="The full key, returned exactly once: in the response that created or rotated "
+        "it (to a team admin). Null everywhere else: only a hash is stored."
+    )
+    integration_key_prefix = serializers.SerializerMethodField(
+        help_text="First 8 characters of the current key, to recognise it. Team admins only."
     )
     open_incidents = serializers.SerializerMethodField()
 
@@ -37,19 +41,33 @@ class ServiceSerializer(serializers.ModelSerializer):
             "escalation_policy",
             "escalation_policy_name",
             "integration_key",
+            "integration_key_prefix",
+            "previous_key_expires_at",
             "mode",
             "mode_until",
             "open_incidents",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "mode", "mode_until", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "mode",
+            "mode_until",
+            "previous_key_expires_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def _is_admin(self, obj: Service) -> bool:
+        request = self.context.get("request")
+        return bool(request and has_role(request.user, obj.team_id, Role.ADMIN))
 
     def get_integration_key(self, obj: Service) -> str | None:
-        request = self.context.get("request")
-        if request and has_role(request.user, obj.team_id, Role.ADMIN):
-            return obj.integration_key
-        return None
+        issued = self.context.get("issued_key") or getattr(obj, "integration_key", None)
+        return issued if issued and self._is_admin(obj) else None
+
+    def get_integration_key_prefix(self, obj: Service) -> str | None:
+        return obj.integration_key_prefix if self._is_admin(obj) else None
 
     @extend_schema_field(OpenCountsSerializer)
     def get_open_incidents(self, obj: Service) -> dict[str, int]:

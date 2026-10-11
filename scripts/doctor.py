@@ -171,6 +171,24 @@ class Doctor:
             and hdr.get("x-frame-options") == "DENY"
             and "referrer-policy" in hdr,
         )
+        csp = hdr.get("content-security-policy", "")
+        check(
+            "SPA enforces a Content-Security-Policy (scripts from self only) and Permissions-Policy",
+            "script-src 'self'" in csp
+            and "frame-ancestors 'none'" in csp
+            and "camera=()" in hdr.get("permissions-policy", ""),
+            csp[:120],
+        )
+        try:
+            urllib.request.urlopen(self.a.base + "/a/not-a-real-token/", timeout=10)
+            link_status, link_body = 200, ""
+        except urllib.error.HTTPError as exc:
+            link_status, link_body = exc.code, exc.read().decode(errors="replace")
+        check(
+            "one-tap action links reach Django through nginx (not the SPA)",
+            link_status == 404 and "Link not valid" in link_body,
+            f"{link_status}",
+        )
         status, _ = anon.call("GET", "/api/v1/incidents/")
         check("API is reachable through the proxy and refuses anonymous callers", status == 403)
 

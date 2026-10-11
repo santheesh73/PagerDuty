@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/api/client";
 import { keys } from "@/api/keys";
-import type { Me } from "@/api/types";
+import type { LoginResult, Me, MfaStatus } from "@/api/types";
 
 /** The signed-in user, or null when signed out (a 403 here is "not logged in", not an error). */
 export function useMe() {
@@ -20,15 +20,32 @@ export function useMe() {
   });
 }
 
+export function isMfaChallenge(result: LoginResult): result is { mfa_required: true } {
+  return "mfa_required" in result && result.mfa_required === true;
+}
+
+function signedIn(client: ReturnType<typeof useQueryClient>, me: Me) {
+  client.clear();
+  client.setQueryData(keys.me, me);
+}
+
 export function useLogin() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: { email: string; password: string }) =>
-      api<Me>("/auth/login/", { method: "POST", body }),
-    onSuccess: (me) => {
-      client.clear();
-      client.setQueryData(keys.me, me);
+      api<LoginResult>("/auth/login/", { method: "POST", body }),
+    onSuccess: (result) => {
+      if (!isMfaChallenge(result)) signedIn(client, result);
     },
+  });
+}
+
+/** The second sign-in step: a code from an authenticator app, or a backup code. */
+export function useLoginMfa() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => api<Me>("/auth/mfa/", { method: "POST", body: { code } }),
+    onSuccess: (me) => signedIn(client, me),
   });
 }
 
@@ -40,6 +57,29 @@ export function useLogout() {
       client.clear();
       client.setQueryData(keys.me, null);
     },
+  });
+}
+
+export function useMfaStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["me", "mfa"],
+    queryFn: () => api<MfaStatus>("/me/mfa/"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function usePasswordResetRequest() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      api<void>("/auth/password-reset/", { method: "POST", body: { email } }),
+  });
+}
+
+export function usePasswordResetConfirm() {
+  return useMutation({
+    mutationFn: (body: { uid: string; token: string; new_password: string }) =>
+      api<void>("/auth/password-reset/confirm/", { method: "POST", body }),
   });
 }
 
