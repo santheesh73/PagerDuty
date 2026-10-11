@@ -182,7 +182,10 @@ def unacknowledge(incident_id: int, *, actor: User, now: datetime | None = None)
         Alert.objects.filter(incident=incident, status=Alert.Status.ACKNOWLEDGED).update(
             status=Alert.Status.TRIGGERED
         )
-        responders = engine.responders_at(incident, incident.escalation_level, now)
+        responders = (
+            [] if incident.is_maintenance
+            else engine.responders_at(incident, incident.escalation_level, now)
+        )
         event = record(
             incident,
             EventType.UNACKNOWLEDGED,
@@ -261,6 +264,8 @@ def escalate(incident_id: int, *, actor: User, now: datetime | None = None) -> I
     now = now or timezone.now()
     with transaction.atomic():
         incident = _lock(incident_id)
+        if incident.is_maintenance:
+            raise Conflict("Maintenance incidents don't escalate; they collect alerts quietly.")
         if (
             incident.status in OPEN
             and next_step(

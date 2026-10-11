@@ -48,6 +48,8 @@ def page(
     Re-running with the same (incident, level, loop, seq) is a no-op: the unique key makes
     the second `get_or_create` find the first row instead of paging again.
     """
+    if incident.is_maintenance:
+        return []  # I13: maintenance incidents never page, whatever a human clicks
     dry_run = incident.service.mode == Service.Mode.DEBUG
     created: list[Notification] = []
     for user in users:
