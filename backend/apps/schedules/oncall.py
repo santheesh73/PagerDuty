@@ -8,8 +8,10 @@ escalation engine share exactly one implementation.
 Rotation model
 --------------
 * daily / weekly: turns are counted in *local calendar days* in the schedule's timezone.
-  A "shift day" starts at `handoff_time` local, so a 09:00 handoff stays 09:00 through DST
-  (the shift on a DST day is simply 23 or 25 hours long).
+  Shift day D starts at the first instant whose local wall time is D `handoff_time`, so a
+  09:00 handoff stays 09:00 through DST (the shift on a DST day is 23 or 25 hours long).
+  "Which shift day is it?" is answered by comparing *instants*, never wall-clock times:
+  during a fall-back hour the same wall time happens twice, and only the first counts.
 * custom: turns are fixed absolute durations (e.g. 12h) measured from `start`; they ignore
   wall-clock time by design, so their local handoff drifts by an hour across DST.
 """
@@ -72,15 +74,26 @@ def layer_user_at(layer: LayerSpec, at: datetime) -> int | None:
         turns = (at - layer.start) // _turn_length(layer)
     else:
         tz = ZoneInfo(layer.timezone)
-        day = _shift_day(at.astimezone(tz), layer.handoff_time)
-        day0 = _shift_day(layer.start.astimezone(tz), layer.handoff_time)
+        day = _shift_day(at, layer.handoff_time, tz)
+        day0 = _shift_day(layer.start, layer.handoff_time, tz)
         turns = (day - day0).days // _days_per_turn(layer)
     return layer.members[turns % len(layer.members)]
 
 
-def _shift_day(local: datetime, handoff: time) -> date:
-    """The calendar date whose shift `local` falls in: before the handoff, it's yesterday's."""
-    return local.date() if local.time() >= handoff else local.date() - timedelta(days=1)
+def _shift_day(at: datetime, handoff: time, tz: ZoneInfo) -> date:
+    """The latest calendar day whose handoff instant is at or before `at`.
+
+    Comparing wall-clock times instead (`local.time() >= handoff`) is wrong for one hour a
+    year: after a fall-back, 01:15 happens twice, and the second 01:15 is *after* a 01:30
+    handoff even though it reads earlier. Found by test_oncall_properties.py.
+    """
+    local_date = at.astimezone(tz).date()
+    # Normally the answer is today or yesterday; tomorrow is possible only where a
+    # fall-back crosses midnight and the local date briefly runs backwards.
+    for day in (local_date + timedelta(days=1), local_date, local_date - timedelta(days=1)):
+        if _first_instant_of_shift_day(day, handoff, tz) <= at:
+            return day
+    return local_date - timedelta(days=2)
 
 
 def _turn_length(layer: LayerSpec) -> timedelta:
@@ -159,9 +172,9 @@ def _layer_boundaries(layer: LayerSpec, since: datetime, until: datetime) -> Ite
         return
 
     tz = ZoneInfo(layer.timezone)
-    day0 = _shift_day(layer.start.astimezone(tz), layer.handoff_time)
+    day0 = _shift_day(layer.start, layer.handoff_time, tz)
     step = _days_per_turn(layer)
-    day = _shift_day(lower.astimezone(tz), layer.handoff_time)
+    day = _shift_day(lower, layer.handoff_time, tz)
     day -= timedelta(days=(day - day0).days % step)  # back up to this turn's first day
     while True:
         point = _first_instant_of_shift_day(day, layer.handoff_time, tz)
@@ -173,7 +186,7 @@ def _layer_boundaries(layer: LayerSpec, since: datetime, until: datetime) -> Ite
 
 
 def _first_instant_of_shift_day(day: date, handoff: time, tz: ZoneInfo) -> datetime:
-    """The earliest UTC instant whose local time on `day` is >= `handoff`.
+    """The earliest UTC instant whose local wall time reaches `day` `handoff`.
 
     Normally that's simply `day handoff` local. Two DST cases need care:
     * ambiguous wall time (fall back): fold=0 picks the first occurrence — correct.
@@ -188,7 +201,8 @@ def _first_instant_of_shift_day(day: date, handoff: time, tz: ZoneInfo) -> datet
     hi = candidate  # maps to after the gap
     while hi - lo > timedelta(seconds=1):
         mid = lo + (hi - lo) / 2
-        if _shift_day(mid.astimezone(tz), handoff) == day:
+        # Around a gap local wall time only moves forwards, so this predicate is monotonic.
+        if mid.astimezone(tz).replace(tzinfo=None) >= wall:
             hi = mid
         else:
             lo = mid

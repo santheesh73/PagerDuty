@@ -16,7 +16,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.catalog.models import Service
 from apps.core import dispatch
-from apps.incidents.models import EventType, Incident
+from apps.incidents.models import EventType, Incident, Status
 from apps.incidents.timeline import record
 
 from .channels import CHANNELS, PAGE_CHANNELS, ChannelError
@@ -48,6 +48,8 @@ def page(
     Re-running with the same (incident, level, loop, seq) is a no-op: the unique key makes
     the second `get_or_create` find the first row instead of paging again.
     """
+    if incident.is_maintenance:
+        return []  # I13: maintenance incidents never page, whatever a human clicks
     dry_run = incident.service.mode == Service.Mode.DEBUG
     created: list[Notification] = []
     for user in users:
@@ -96,6 +98,11 @@ def deliver(notification_id: int, *, now: datetime | None = None) -> Notificatio
             return notification
 
         incident = notification.incident
+        if incident.status == Status.RESOLVED:
+            # C1: the page was queued before the incident closed (broker outage, retries).
+            notification.status = Notification.Status.CANCELLED
+            notification.save(update_fields=["status", "updated_at"])
+            return notification
         if incident.service.mode == Service.Mode.DEBUG:
             # Mode switched to debug after the row was created: still never send.
             notification.status = Notification.Status.DRY_RUN
@@ -105,8 +112,23 @@ def deliver(notification_id: int, *, now: datetime | None = None) -> Notificatio
         notification.attempts += 1
         try:
             CHANNELS[notification.channel].send(notification)
-        except ChannelError as exc:
-            notification.last_error = str(exc)[:2000]
+        except Exception as exc:
+            # Every failure a channel raises must count as an attempt. Catching only
+            # ChannelError let anything else (a bad header, an unknown channel key)
+            # escape before `attempts` was committed, so MAX_ATTEMPTS could never trip
+            # and `redispatch_stuck` re-drove the same poison row every sweep, forever.
+            if isinstance(exc, ChannelError):
+                notification.last_error = str(exc)[:2000]
+            else:
+                # Not a declared transient failure: keep the type so the row says what broke.
+                notification.last_error = f"{type(exc).__name__}: {exc}"[:2000]
+                logger.exception(
+                    "notification channel raised an unexpected error",
+                    extra={
+                        "notification_id": notification.pk,
+                        "channel": notification.channel,
+                    },
+                )
             if notification.attempts >= MAX_ATTEMPTS:
                 notification.status = Notification.Status.FAILED
                 notification.save(update_fields=["attempts", "last_error", "status", "updated_at"])

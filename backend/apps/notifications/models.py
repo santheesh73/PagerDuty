@@ -13,6 +13,7 @@ class Notification(TimeStampedModel):
         SENT = "sent", "Sent"
         FAILED = "failed", "Failed"
         DRY_RUN = "dry_run", "Dry run"
+        CANCELLED = "cancelled", "Cancelled"  # incident resolved before it was delivered
 
     incident = models.ForeignKey(
         "incidents.Incident", on_delete=models.CASCADE, related_name="notifications"

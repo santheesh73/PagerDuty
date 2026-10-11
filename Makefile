@@ -21,7 +21,7 @@ SERVICE ?= checkout-api
 ROUTING_KEY ?=
 
 
-.PHONY: help up down logs ps seed reseed send-alert chaos-redis badge test test-backend test-frontend \
+.PHONY: help up down logs ps seed reseed send-alert chaos-redis badge simulate loadtest e2e test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell
 
 help: ## Show this help
@@ -67,6 +67,9 @@ test-backend: ## Backend tests with coverage (fails under 85%)
 test-frontend: ## Frontend tests
 	$(FRONTEND) npm test
 
+simulate: ## Fault-injection simulator over seeds 1-20 (SEEDS=n, OPS=n to change)
+	cd backend && uv run python manage.py simulate --seeds $${SEEDS:-20} --operations $${OPS:-600}
+
 test: test-backend test-frontend ## All tests
 
 lint: ## Ruff + ESLint + Prettier
@@ -93,6 +96,21 @@ badge: ## Refresh docs/img/coverage.svg from the last backend test run (LOCAL)
 schema: ## Regenerate OpenAPI schema and the frontend's TS types
 	$(BACKEND) python manage.py spectacular --file openapi.yaml --validate
 	$(FRONTEND) npm run gen:api
+
+loadtest: ## k6 against the prod-like stack (VUS=32 DURATION=60s); then verify the database
+	@set -e; export SECRET_KEY=$${SECRET_KEY:-loadtest} THROTTLE_EVENTS=$${THROTTLE_EVENTS:-100000/min}; \
+	dc="$${COMPOSE:-docker compose -f docker-compose.prod.yml}"; $$dc up --build -d --wait --wait-timeout 300; \
+	key=$$($$dc exec -T api python manage.py routing_key checkout-api | tail -1); run=load$$$$; \
+	mkdir -p loadtest/out; chmod 777 loadtest/out; \
+	docker run --rm --network host -v "$$PWD/loadtest:/loadtest" -v "$$PWD/loadtest/out:/out" grafana/k6:2.3.0 run --quiet \
+	  -e BASE_URL=http://localhost:8080 -e ROUTING_KEY=$$key -e RUN_ID=$$run \
+	  -e VUS=$${VUS:-32} -e DURATION=$${DURATION:-60s} /loadtest/events.js; \
+	new=$$(python3 -c "import json;print(json.load(open('loadtest/out/summary.json'))['metrics']['pulse_new_keys']['values']['count'])"); \
+	hot=$$(python3 -c "import json;print(json.load(open('loadtest/out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])"); \
+	$$dc exec -T api python - --run-id $$run --new-keys $$new --hot-requests $$hot < loadtest/verify.py
+
+e2e: ## One Playwright journey against the prod-like stack (needs `docker compose -f docker-compose.prod.yml up -d`)
+	cd e2e && npm ci && npx playwright install chromium && npx playwright test
 
 check: lint typecheck migrations-check test ## Everything CI runs
 

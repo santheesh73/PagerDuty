@@ -213,8 +213,10 @@ const DURATIONS = [
   { label: "30 minutes", minutes: 30 },
   { label: "1 hour", minutes: 60 },
   { label: "4 hours", minutes: 240 },
-  { label: "24 hours", minutes: 1440 },
-  { label: "Until I turn it off", minutes: 0 },
+  { label: "12 hours", minutes: 720 },
+  // The API caps a window at 24 h measured on the server's clock; stay under it so a browser
+  // clock that runs a little ahead can't turn the longest choice into a 422.
+  { label: "23 hours", minutes: 1380 },
 ];
 
 function ModeCard({ service, canEdit }: { service: Service; canEdit: boolean }) {

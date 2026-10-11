@@ -206,3 +206,92 @@ peer ranges); React Router 7 (v8 exists; v7 meets the floor with a stable API).
 `Incident.number` uses a Postgres sequence (`db_default=nextval(...)`), so numbers are
 human-friendly and race-free without a counter row lock. Like any sequence it can skip
 numbers after a rollback; that's acceptable for an identifier.
+
+## 18. HSTS is opt-in, and set to one year in the deploy config
+
+**Decision.** `SECURE_HSTS_SECONDS` defaults to `0` in `config.settings.prod`. The Render
+blueprint sets it to `31536000` (one year), without `includeSubdomains` or `preload`.
+
+**Alternatives.** Default to a year in code; leave it off everywhere.
+
+**Why.** HSTS is sticky: once a browser has seen the header for a host it refuses plain HTTP
+there for the whole period, and the only fix is waiting it out. The same prod settings run
+the documented `docker-compose.prod.yml` stack on `http://localhost:8080`, where a year-long
+default would lock a developer's browser out of `localhost` for a year. So the code stays
+safe-by-default for that case and the deploy that is HTTPS-only turns it on explicitly. It is
+deliberately not preloaded: preload is effectively irreversible and shouldn't be decided by a
+demo blueprint.
+
+---
+
+## What the property tests found
+
+Phase 2 of the hardening work (see [`INVARIANTS.md`](INVARIANTS.md)) replaced hand-picked
+on-call cases with generated ones. Each defect below has a focused regression test that
+fails against the old code (verified by restoring the old file and re-running it).
+
+### F1. The pager went back to yesterday's responder during a fall-back hour
+
+**Found by** `test_daily_and_weekly_handoffs_land_on_the_local_handoff_time_across_dst`,
+falsifying example: New York, daily rotation, handoff 01:30, 2025-11-02.
+
+**Cause.** `_shift_day` compared wall-clock times. After a fall-back, 01:00–02:00 happens
+twice; the second 01:15 reads earlier than a 01:30 handoff even though it is 45 minutes
+after it, so the resolver assigned the previous shift day for the repeated half hour.
+`render_shifts` placed the boundary correctly, so the timeline and the escalation engine
+disagreed for 30 minutes a year, and the engine would have paged the wrong person.
+
+**Fix.** The shift day is now *the latest day whose handoff instant is at or before `at`*,
+comparing instants only. The DST-gap search no longer depends on `_shift_day`.
+
+**Why the example tests missed it.** They covered fall-back with a 09:00 handoff, which is
+nowhere near the repeated hour. The property generator weights handoffs towards
+01:00–03:00 and probes every 5 minutes around each transition.
+
+### F2. Zero-length custom turns could reach the resolver
+
+**Found by** the adversarial review of I2. Only the API's `turn_length_hours >= 1` rejected
+them; the database constraint checked only `NOT NULL`, so the admin could save a zero or
+negative turn and every `on_call` for that schedule would raise. A `CHECK
+(turn_length > 0)` constraint (`layer_turn_length_positive`) now refuses it.
+
+---
+
+## What the simulator found
+
+`manage.py simulate --seed N` (see [`INVARIANTS.md`](INVARIANTS.md)) drives the real code against
+a real Postgres with a virtual clock and injected faults: broker down, messages lost and
+duplicated, a worker dying after writing pages but before commit, concurrent sweepers, clock
+skew, policies edited mid-flight, service modes flipped mid-flight, and a flaky email channel.
+`apps/core/invariants.py` runs after every operation. Each defect below has a focused
+regression test that fails against the old code.
+
+### S1. Human actions paged people from a maintenance incident (I13)
+
+**Found by** seed 20261011, first run. **Cause.** I13 was enforced where an incident opens
+(`open_incident` returns before paging), but `unacknowledge` and `reassign` call `page()`
+directly, and manual `escalate` walks the policy. Acknowledge then unacknowledge on a
+maintenance incident paged the on-call. **Fix.** `page()` refuses maintenance incidents, and
+manual escalate on one is a `Conflict`. **Regression.**
+`test_human_actions_on_a_maintenance_incident_never_page` fails 3 of 3 cases without it.
+
+### S2. A delayed page woke someone for an incident that was already resolved (C1)
+
+**Cause.** `deliver` checked the row's status and the service mode but not the incident. A
+notification queued before resolution (broker outage, retry backoff, a lost message re-driven
+by the sweeper) was sent afterwards. **Fix.** `deliver` marks it `cancelled` when the incident
+is resolved (new status, migration `0002`). **Regression.**
+`test_a_page_queued_before_resolution_is_never_sent_after_it` fails without the guard
+(`sent` instead of `cancelled`).
+
+### Two things about the simulator itself
+
+- **It could not see S2 at first.** `deliver` deliberately catches every exception a channel
+  raises (a poison message must not be retried forever), so a violation raised from inside
+  the simulated `send` was swallowed as a failed notification. With the fix removed, 26 seeds
+  passed. Violations seen inside `send` are now recorded and raised by the step loop; with
+  the S2 fix removed, seeds 1 and 2 now fail within seconds. A checker that cannot fail was
+  worth nothing, so this is the check that was verified, not assumed.
+- **A checker gap, not a product bug.** Seed 1 reported I9 (`first_response_at` set with no
+  human event) for an incident whose human resolve is recorded as `maintenance_ended`
+  rather than `resolved`. The checker now counts that event.

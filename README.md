@@ -11,6 +11,19 @@
 **Live demo:** not deployed yet. [`render.yaml`](render.yaml) deploys the whole stack as a Render Blueprint, re-seeded nightly ([deploy notes](#deploy)).
 **Demo logins** (seeded locally and on the demo): `responder@demo.local` / `demo1234` (on call for Payments), `admin@demo.local` / `demo1234` (team admin).
 
+## What this guarantees
+
+Seventeen written guarantees, each with the mechanism that enforces it and the test that proves it, in [`docs/INVARIANTS.md`](docs/INVARIANTS.md). The ones that matter most:
+
+- **An alert becomes exactly one incident**, however many arrive at once (I1).
+- **A page is never sent twice, and never lost**: not on a duplicated task, a racing sweeper, a dead broker or a worker that dies mid-write (I4, I5).
+- **Escalation always terminates and never stalls** (I6, I7).
+- **A schedule names exactly one responder at any instant**, and handoffs stay at the configured local time across DST (I2, I11).
+- **Maintenance never pages and debug never sends**, whatever a human clicks (I12, I13).
+- **A page queued before an incident resolves never wakes anyone after** (C1).
+
+**How it's proven:** Postgres constraints where a guarantee can be structural; property-based tests (Hypothesis) for the on-call maths; a seeded fault-injection simulator that checks the invariants after every operation under broker outages, lost and duplicated messages, workers dying mid-transaction, concurrent sweepers, clock skew and edits mid-flight; a k6 load run whose results are checked against the database; and one browser journey in CI. The simulator and the property tests each found real bugs, recorded with their fixes in [`docs/DECISIONS.md`](docs/DECISIONS.md). What is *not* mechanically checked is listed in INVARIANTS.md too.
+
 ## What makes this interesting
 
 - **Restart-safe escalation timers.** The timer is a column in Postgres (`next_escalation_at`), not a Celery countdown. Wipe Redis mid-incident and it still escalates. [`make chaos-redis`](scripts/chaos_redis.sh) proves it live.
@@ -18,7 +31,7 @@
 - **Idempotent paging.** The ETA task and the safety-net sweeper are *designed* to race. A guarded `SELECT … FOR UPDATE SKIP LOCKED` lets exactly one win, and unique notification keys mean a retry can never page twice.
 - **DST-correct rotations.** A 09:00 handoff stays at 09:00 local through spring-forward and fall-back (including a handoff inside the non-existent 02:30 hour). The resolver is pure functions with no database, tested exhaustively.
 - **Policy snapshots.** Editing an escalation policy never rewires an incident already in flight, but schedule targets still follow the live rotation.
-- **A frozen-time test suite.** 187 backend tests (94% coverage, 98% on the engines) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
+- **A frozen-time test suite.** 225 backend tests (93% coverage) drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
 
 ## Quick start
 
@@ -106,13 +119,32 @@ Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing mo
 | **Notifications** | In-app inbox + email behind a `Channel` protocol, retries with backoff, idempotency keys, dry-run in debug mode |
 | **Analytics** | **Time to first response** (headline), MTTA, MTTR, daily volume, noisiest services, escalation rate |
 
+## Measured
+
+One run of `make loadtest` (k6 v2.3.0, Events API, 70% repeats of 50 hot dedup keys / 30% never-seen keys, 32 concurrent users for 60 s after a 5 s warm-up):
+
+| | |
+|---|---|
+| Throughput | **77.3 requests/s** (4,635 requests in the measured minute) |
+| Latency | p50 **411 ms** · p95 **532 ms** · p99 **593 ms** (max 700 ms) |
+| Errors | 0 unexpected responses |
+| After the run | 1,515 new keys → 1,515 incidents; 3,425 repeats → 3,425 alerts attached to the 50 hot incidents; no key with two open incidents; no notification left pending |
+
+**Hardware and setup:** a 4 vCPU Intel Xeon @ 2.8 GHz VM with 15 GB RAM running *everything* on one host: k6, nginx, three gunicorn workers, the Celery worker, Beat, Postgres 17 and Redis. The per-key throttle (`THROTTLE_EVENTS`, default 120/min) was raised to 100,000/min so the run measures the ingest path, not the limiter. Closed-loop at saturation, so the latencies are queueing under load, not the cost of one request; treat the numbers as "what a small box does", not a benchmark. Run `make loadtest` (`VUS=`, `DURATION=` to change it) to get your own, and `loadtest/verify.py` fails the run if dedup ever broke.
+
 ## Testing
 
 ```bash
 make test            # backend (pytest + coverage) and frontend (Vitest)
 make check           # + ruff, mypy, eslint, tsc, prettier, migration drift
 make chaos-redis     # live: wipe Redis mid-incident, confirm it still escalates
+make simulate        # fault-injection simulator over seeds 1-20 (a failure prints its seed)
+make loadtest        # k6 against the prod-like stack, then verify the database
+make e2e             # one Playwright journey: alert, page, escalate, acknowledge, resolve
 ```
+
+- **Property tests** (`schedules/tests/test_oncall_properties.py`): one responder at any instant, rendered shifts partition the window and agree with `on_call`, handoffs land on local time across DST in six zones, rotation fairness, determinism. They found a real fall-back bug.
+- **Simulator** (`manage.py simulate --seed N`): real code, real Postgres, a virtual clock, injected faults, and `core/invariants.py` after every operation. The fixed seed runs in CI; any failure prints the seed and the command that reproduces it.
 
 - **On-call resolver** (no DB): handoff instants, DST forward/back in New York and London, weekly/custom rotations, override precedence, layer priority, empty layers, shift rendering.
 - **Escalation engine**: level advance, loops, exhaustion, ack stops it, ETA + sweeper double-fire pages once (plus a 4-thread race), no-responder skip, policy edits don't touch open incidents, unack restarts the timer, low urgency never escalates, debug → dry run, sweeper recovery after a lost ETA message, broker outage doesn't fail ingest.

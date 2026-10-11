@@ -1,7 +1,9 @@
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
+from hypothesis import HealthCheck, settings
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Membership, User
@@ -11,6 +13,18 @@ from apps.escalations.models import EscalationTarget
 from apps.incidents.models import Incident
 from apps.schedules.models import LayerMember
 from tests.factories import ServiceFactory
+
+# Hypothesis: CI is derandomized (a fixed seed derived from each test) so a property can
+# never pass on one run and fail on the next; local runs explore new examples every time.
+settings.register_profile(
+    "ci",
+    derandomize=True,
+    deadline=None,
+    print_blob=True,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+settings.register_profile("dev", deadline=None, suppress_health_check=[HealthCheck.too_slow])
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 # A Wednesday. The default factory schedule rotates daily at 09:00 UTC from Monday Jan 5,
 # so at T0 the first of its two responders is on call.

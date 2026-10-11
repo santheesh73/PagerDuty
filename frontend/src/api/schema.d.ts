@@ -955,9 +955,10 @@ export interface components {
      *     * `sent` - Sent
      *     * `failed` - Failed
      *     * `dry_run` - Dry run
+     *     * `cancelled` - Cancelled
      * @enum {string}
      */
-    NotificationStatusEnum: "pending" | "sent" | "failed" | "dry_run";
+    NotificationStatusEnum: "pending" | "sent" | "failed" | "dry_run" | "cancelled";
     OnCallEntry: {
       user: components["schemas"]["UserSummary"] | null;
       schedule: components["schemas"]["ScheduleRef"] | null;
@@ -1212,6 +1213,13 @@ export interface components {
      * @enum {string}
      */
     ServiceModeEnum: "active" | "maintenance" | "debug";
+    /**
+     * @description Maintenance and debug suppress paging, so both need a bounded window.
+     *
+     *     Without one, a service quietly stops paging for good and nobody finds out until an
+     *     outage goes unanswered. `expire_service_modes` only reclaims services that have a
+     *     `mode_until`, so an open-ended window would never be swept back to active.
+     */
     ServiceModeRequest: {
       mode: components["schemas"]["ServiceModeEnum"];
       /** Format: date-time */

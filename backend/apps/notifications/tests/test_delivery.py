@@ -100,3 +100,17 @@ def test_mark_read_and_mark_all_read(open_incident: Incident, people: Paging) ->
     assert Notification.objects.get(pk=row.pk).read_at is not None
     page(open_incident, [people.on_call], level=0, loop=0, seq=1)
     assert actions.mark_all_read(people.on_call) == 3
+
+
+def test_a_page_queued_before_resolution_is_never_sent_after_it(open_incident: Incident) -> None:
+    """C1: a delayed delivery must not wake someone for a closed incident."""
+    from apps.incidents import actions as incident_actions
+
+    pk = email_row(open_incident).pk
+    incident_actions.resolve(open_incident.pk, actor=None, via="monitor")
+
+    row = deliver(pk)
+
+    assert row is not None
+    assert row.status == Notification.Status.CANCELLED
+    assert mail.outbox == []

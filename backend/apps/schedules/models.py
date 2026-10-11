@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.validators import MinValueValidator
 from django.db import models
 
@@ -50,6 +52,13 @@ class ScheduleLayer(TimeStampedModel):
             models.CheckConstraint(
                 condition=~models.Q(rotation_type="custom") | models.Q(turn_length__isnull=False),
                 name="layer_custom_needs_turn_length",
+            ),
+            # A zero or negative turn would divide by zero in the resolver; only the API
+            # rejected it before, so the admin or a script could still store one.
+            models.CheckConstraint(
+                condition=models.Q(turn_length__isnull=True)
+                | models.Q(turn_length__gt=timedelta(0)),
+                name="layer_turn_length_positive",
             ),
         ]
 

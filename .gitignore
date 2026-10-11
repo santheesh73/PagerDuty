@@ -29,3 +29,4 @@ frontend/coverage/
 
 # Local Redis snapshots
 dump.rdb
+loadtest/out/

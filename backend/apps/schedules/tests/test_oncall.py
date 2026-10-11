@@ -3,6 +3,8 @@ equivalent alongside so the DST cases can be checked by eye."""
 
 from datetime import UTC, datetime, time, timedelta
 
+import pytest
+
 from apps.schedules.models import Rotation
 from apps.schedules.oncall import (
     LayerSpec,
@@ -259,3 +261,51 @@ def test_render_shifts_for_a_custom_rotation() -> None:
 
 def test_render_shifts_of_an_empty_window_is_empty() -> None:
     assert render_shifts(schedule(layer()), utc(2026, 1, 6), utc(2026, 1, 6)) == []
+
+
+# --- Regressions found by the property tests (test_oncall_properties.py) -------------------
+
+
+def test_fall_back_repeated_hour_does_not_hand_the_pager_back_to_yesterday() -> None:
+    """New York falls back at 02:00 EDT → 01:00 EST on 2025-11-02, so 01:00-02:00 happens
+    twice. With a 01:30 handoff, the shift changes at the *first* 01:30 (05:30 UTC). The
+    second pass through 01:00-01:29 (06:00-06:29 UTC) is after the handoff and must stay
+    with today's responder; comparing wall-clock times alone handed it back to yesterday's.
+    """
+    ny = layer(
+        (ALICE, BOB), start=utc(2025, 10, 1, 5, 30), handoff=time(1, 30), tz="America/New_York"
+    )
+    yesterday, today = (
+        layer_user_at(ny, utc(2025, 11, 2, 5, 29)),
+        layer_user_at(ny, utc(2025, 11, 2, 5, 30)),
+    )
+    assert yesterday != today
+    for minute in (0, 15, 29):  # 01:00, 01:15, 01:29 EST — the repeated half hour
+        assert layer_user_at(ny, utc(2025, 11, 2, 6, minute)) == today
+    assert layer_user_at(ny, utc(2025, 11, 2, 6, 30)) == today  # the second 01:30
+
+
+def test_fall_back_repeated_hour_in_london_and_render_agree() -> None:
+    ldn = layer(
+        (ALICE, BOB), start=utc(2025, 10, 1, 0, 45), handoff=time(1, 45), tz="Europe/London"
+    )
+    sched = schedule(ldn)
+    # London falls back 02:00 BST → 01:00 GMT on 2025-10-26: 01:00-02:00 repeats.
+    shifts = render_shifts(sched, utc(2025, 10, 25, 12), utc(2025, 10, 26, 12))
+    for minutes in range(0, 120, 5):
+        at = utc(2025, 10, 26, 0) + timedelta(minutes=minutes)
+        owners = [s.user_id for s in shifts if s.start <= at < s.end]
+        assert [on_call(sched, at)] == owners, at.isoformat()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("length", [timedelta(0), timedelta(hours=-1)])
+def test_database_rejects_a_non_positive_custom_turn_length(length: timedelta) -> None:
+    """Found reviewing I2: only the API validated turn length, so the admin could store a
+    zero-length turn that crashes the resolver. Postgres now refuses it."""
+    from django.db import IntegrityError
+
+    from tests.factories import ScheduleLayerFactory
+
+    with pytest.raises(IntegrityError):
+        ScheduleLayerFactory(rotation_type=Rotation.CUSTOM, turn_length=length)

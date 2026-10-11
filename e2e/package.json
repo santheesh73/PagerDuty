@@ -1,0 +1,12 @@
+{
+  "name": "pulse-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "One end-to-end journey against the Docker stack: alert -> page -> escalate -> ack -> resolve",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

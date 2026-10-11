@@ -8,6 +8,7 @@ from apps.alerting.actions import Event, ingest
 from apps.alerting.models import Alert
 from apps.catalog import actions as catalog_actions
 from apps.catalog.models import Service
+from apps.core.errors import Conflict
 from apps.incidents import actions
 from apps.incidents.models import EventType, Incident, Status
 from apps.notifications.models import Notification
@@ -165,6 +166,33 @@ def test_maintenance_consolidates_every_alert_into_one_quiet_incident(
     assert Notification.objects.count() == 0
     assert set(Alert.objects.values_list("status", flat=True)) == {Alert.Status.SUPPRESSED}
     assert incident.events.first().type == EventType.MAINTENANCE_STARTED
+
+
+@pytest.mark.parametrize("action", ["unacknowledge", "reassign", "escalate"])
+def test_human_actions_on_a_maintenance_incident_never_page(
+    service: Service, trigger: TriggerFn, action: str
+) -> None:
+    """Found by the fault simulator (seed 20261011): I13 held only until someone clicked."""
+    catalog_actions.set_mode(
+        service, Service.Mode.MAINTENANCE, until=T0 + timedelta(hours=1), now=T0
+    )
+    service.refresh_from_db()
+    incident_id = trigger(service, "cpu").incident_id
+    paging = Paging(service)
+    actor = paging.admin
+    now = T0 + timedelta(minutes=1)
+    if action == "unacknowledge":
+        actions.acknowledge(incident_id, actor=actor, now=now)
+        actions.unacknowledge(incident_id, actor=actor, now=now)
+    elif action == "reassign":
+        actions.reassign(incident_id, actor=actor, assignee=paging.on_call, now=now)
+    else:
+        with pytest.raises(Conflict):
+            actions.escalate(incident_id, actor=actor, now=now)
+
+    incident = Incident.objects.get(pk=incident_id)
+    assert Notification.objects.count() == 0
+    assert incident.next_escalation_at is None
 
 
 def test_mode_expiry_returns_service_to_active_and_closes_maintenance(
