@@ -68,7 +68,7 @@ export function useRotateKey(id: number) {
     onSuccess: (service) => {
       client.setQueryData(keys.services.detail(id), service);
       toast.success("Integration key rotated", {
-        description: "The old key stops working immediately.",
+        description: "Copy the new key now. The old one keeps working for 24 hours.",
       });
     },
     onError: errorToast("Couldn't rotate the key"),

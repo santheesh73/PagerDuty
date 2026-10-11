@@ -20,6 +20,9 @@ x-api-env: &api-env
   FRONTEND_URL: http://localhost:8080
   SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-0}
   SECURE_COOKIES: ${SECURE_COOKIES:-0}
+  # Production settings require MFA for team admins. This local/demo stack signs in as the demo
+  # admin without one, so it is off here; set it to 1 (or drop the line) for a real deployment.
+  REQUIRE_MFA_FOR_ADMINS: ${REQUIRE_MFA_FOR_ADMINS:-0}
   SEED_DEMO: ${SEED_DEMO:-0}
   # nginx (the `web` service) is the only proxy in front of Django here and appends the peer
   # address to X-Forwarded-For, so trust exactly one hop. Behind another proxy/LB, raise it.
@@ -175,6 +178,8 @@ services:
     environment:
       PORT: "80"
       API_UPSTREAM: http://api:8000
+      CSP_MODE: ${CSP_MODE:-enforce}
+      CSP_CONNECT_EXTRA: ${CSP_CONNECT_EXTRA:-}
     ports: ["8080:80"]
     depends_on: { api: { condition: service_healthy } }
     healthcheck:

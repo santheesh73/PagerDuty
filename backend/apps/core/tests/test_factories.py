@@ -27,6 +27,7 @@ def test_service_factory_builds_a_complete_pageable_graph() -> None:
     members = LayerMember.objects.filter(layer__schedule=l0_target.target_schedule)
     assert members.count() == 2
     assert Membership.objects.filter(team=service.team).count() == 3
+    assert service.integration_key is not None
     assert len(service.integration_key) == 64
 
 

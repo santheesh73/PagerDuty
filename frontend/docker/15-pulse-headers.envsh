@@ -1,0 +1,23 @@
+#!/bin/sh
+# Writes the security headers every static response carries (included by both locations in
+# nginx.conf; nginx drops inherited add_header lines as soon as a location sets its own).
+#
+#   CSP_MODE=enforce (default) | report-only    try a policy against real traffic first
+#   CSP_CONNECT_EXTRA="https://o0.ingest.sentry.io"   extra connect-src origins (error reporting)
+#
+# 'unsafe-inline' is allowed for styles only: React and Recharts set style attributes, which a
+# nonce cannot cover. Scripts are 'self' only, which is what stops injected markup from running.
+policy="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${CSP_CONNECT_EXTRA:-}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; report-uri /api/v1/csp-report/"
+if [ "${CSP_MODE:-enforce}" = "report-only" ]; then
+  csp_header="Content-Security-Policy-Report-Only"
+else
+  csp_header="Content-Security-Policy"
+fi
+cat > /etc/nginx/pulse-headers.conf <<CONF
+add_header ${csp_header} "${policy}" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+CONF

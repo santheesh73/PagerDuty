@@ -28,6 +28,13 @@ export type OnCallNow = S["OnCallNow"];
 export type OnCallPolicy = S["OnCallPolicy"];
 export type Notification = S["Notification"];
 export type AnalyticsSummary = S["Summary"];
+export type MfaStatus = S["MfaStatus"];
+export type MfaSetup = S["MfaSetup"];
+export type BackupCodes = S["BackupCodes"];
+export type SessionInfo = S["Session"];
+export type AuditEvent = S["AuditEvent"];
+/** /auth/login/ answers with the user, or asks for the second factor. */
+export type LoginResult = Me | { mfa_required: true };
 export type DayPoint = S["DayPoint"];
 
 export type IncidentStatus = S["IncidentStatusEnum"];

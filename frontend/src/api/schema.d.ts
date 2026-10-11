@@ -36,6 +36,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/audit-events/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Security-relevant actions in the teams you administer (staff: everything). */
+    get: operations["audit_events_list"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/audit-events/{id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Security-relevant actions in the teams you administer (staff: everything). */
+    get: operations["audit_events_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/auth/csrf/": {
     parameters: {
       query?: never;
@@ -62,6 +96,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
+    /** @description Signs in, or answers `{"mfa_required": true}` when the account has two-factor authentication: then POST the code to /auth/mfa/. */
     post: operations["auth_login_create"];
     delete?: never;
     options?: never;
@@ -85,6 +120,58 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/mfa/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["auth_mfa_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/password-reset/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Always 204, whether or not the address has an account (no enumeration). The email is sent
+     *     by a task, so the response time does not depend on SMTP either.
+     */
+    post: operations["auth_password_reset_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/password-reset/confirm/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["auth_password_reset_confirm_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/escalation-policies/": {
     parameters: {
       query?: never;
@@ -92,8 +179,20 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["escalation_policies_list"];
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["escalation_policies_create"];
     delete?: never;
     options?: never;
@@ -108,12 +207,36 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["escalation_policies_retrieve"];
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     put: operations["escalation_policies_update"];
     post?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     delete: operations["escalation_policies_destroy"];
     options?: never;
     head?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     patch: operations["escalation_policies_partial_update"];
     trace?: never;
   };
@@ -382,6 +505,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/me/mfa/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["me_mfa_retrieve"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/mfa/backup-codes/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_mfa_backup_codes_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/mfa/confirm/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_mfa_confirm_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/mfa/disable/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_mfa_disable_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/mfa/setup/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_mfa_setup_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/me/notification-rules/": {
     parameters: {
       query?: never;
@@ -436,6 +639,72 @@ export interface paths {
      *     because there is nothing shared: every row belongs to the caller or does not exist.
      */
     patch: operations["me_notification_rules_partial_update"];
+    trace?: never;
+  };
+  "/api/v1/me/password/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_password_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/sessions/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Your signed-in sessions. Deleting one signs that browser out. */
+    get: operations["me_sessions_list"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/sessions/{id}/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Your signed-in sessions. Deleting one signs that browser out. */
+    delete: operations["me_sessions_destroy"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/sessions/revoke-others/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["me_sessions_revoke_others_create"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/v1/notifications/": {
@@ -530,8 +799,20 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_list"];
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["schedules_create"];
     delete?: never;
     options?: never;
@@ -546,12 +827,36 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_retrieve"];
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     put: operations["schedules_update"];
     post?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     delete: operations["schedules_destroy"];
     options?: never;
     head?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     patch: operations["schedules_partial_update"];
     trace?: never;
   };
@@ -562,6 +867,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_oncall_retrieve"];
     put?: never;
     post?: never;
@@ -578,6 +889,12 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_shifts_list"];
     put?: never;
     post?: never;
@@ -594,10 +911,20 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_overrides_list"];
     put?: never;
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["schedules_overrides_create"];
     delete?: never;
     options?: never;
@@ -612,16 +939,36 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["schedules_overrides_retrieve"];
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     put: operations["schedules_overrides_update"];
     post?: never;
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     delete: operations["schedules_overrides_destroy"];
     options?: never;
     head?: never;
-    /** @description /schedules/{schedule_pk}/overrides/ — members read, team admins write. */
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     patch: operations["schedules_overrides_partial_update"];
     trace?: never;
   };
@@ -632,8 +979,20 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["services_list"];
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["services_create"];
     delete?: never;
     options?: never;
@@ -648,12 +1007,36 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     get: operations["services_retrieve"];
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     put: operations["services_update"];
     post?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     delete: operations["services_destroy"];
     options?: never;
     head?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     patch: operations["services_partial_update"];
     trace?: never;
   };
@@ -666,6 +1049,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["services_mode_create"];
     delete?: never;
     options?: never;
@@ -682,6 +1071,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["services_rotate_key_create"];
     delete?: never;
     options?: never;
@@ -698,6 +1093,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
+    /**
+     * @description Records create/update/delete on a DRF viewset as `<audit_name>.<created|updated|deleted>`.
+     *
+     *     Hooks `create`/`update`/`destroy` rather than `perform_*`, which the viewsets override for
+     *     their own permission checks, so a subclass can never silently skip the record.
+     */
     post: operations["services_test_alert_create"];
     delete?: never;
     options?: never;
@@ -810,6 +1211,23 @@ export interface components {
      * @enum {string}
      */
     AlertStatusEnum: "triggered" | "acknowledged" | "resolved" | "suppressed";
+    AuditEvent: {
+      readonly id: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly action: string;
+      readonly actor_id: number | null;
+      readonly actor_email: string;
+      readonly team_id: number | null;
+      readonly target_type: string;
+      readonly target_id: string;
+      readonly ip: string | null;
+      readonly data: unknown;
+    };
+    BackupCodes: {
+      /** @description Shown once. */
+      backup_codes: string[];
+    };
     /**
      * @description * `in_app` - In-app
      *     * `email` - Email
@@ -863,6 +1281,10 @@ export interface components {
       mtta_seconds: number | null;
       /** Format: double */
       mttr_seconds: number | null;
+    };
+    DisableMfaRequest: {
+      password: string;
+      code: string;
     };
     /** @description A policy and its ordered levels. Writes replace `rules` wholesale, atomically. */
     EscalationPolicy: {
@@ -1081,6 +1503,20 @@ export interface components {
       readonly team: components["schemas"]["Team"];
       readonly role: components["schemas"]["RoleEnum"];
     };
+    MfaCodeRequest: {
+      code: string;
+    };
+    MfaSetup: {
+      /** @description Base32. Shown once; type it into an authenticator app. */
+      secret: string;
+      otpauth_uri: string;
+    };
+    MfaStatus: {
+      enabled: boolean;
+      /** @description True if your role requires MFA (team admins and staff). */
+      enforced: boolean;
+      backup_codes_remaining: number;
+    };
     NoisyService: {
       id: number;
       name: string;
@@ -1189,6 +1625,21 @@ export interface components {
       previous: string | null;
       results: components["schemas"]["Alert"][];
     };
+    PaginatedAuditEventList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous: string | null;
+      results: components["schemas"]["AuditEvent"][];
+    };
     PaginatedEscalationPolicyList: {
       /** @example 123 */
       count: number;
@@ -1275,6 +1726,19 @@ export interface components {
       previous: string | null;
       results: components["schemas"]["Service"][];
     };
+    PasswordChangeRequest: {
+      current_password: string;
+      new_password: string;
+    };
+    PasswordResetConfirmRequest: {
+      uid: string;
+      token: string;
+      new_password: string;
+    };
+    PasswordResetRequestRequest: {
+      /** Format: email */
+      email: string;
+    };
     PatchedContactUpdateRequest: {
       phone_number?: string;
       webhook_url?: string;
@@ -1327,6 +1791,9 @@ export interface components {
     };
     ReassignRequest: {
       assignee: number;
+    };
+    RevokedCount: {
+      count: number;
     };
     /**
      * @description * `admin` - Team admin
@@ -1391,8 +1858,12 @@ export interface components {
       description: string;
       escalation_policy: number;
       readonly escalation_policy_name: string;
-      /** @description Only team admins see the key; everyone else gets null. */
+      /** @description The full key, returned exactly once: in the response that created or rotated it (to a team admin). Null everywhere else: only a hash is stored. */
       readonly integration_key: string | null;
+      /** @description First 8 characters of the current key, to recognise it. Team admins only. */
+      readonly integration_key_prefix: string | null;
+      /** Format: date-time */
+      readonly previous_key_expires_at: string | null;
       readonly mode: components["schemas"]["ServiceModeEnum"];
       /** Format: date-time */
       readonly mode_until: string | null;
@@ -1426,6 +1897,14 @@ export interface components {
       name: string;
       description?: string;
       escalation_policy: number;
+    };
+    Session: {
+      readonly id: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly ip: string | null;
+      readonly user_agent: string;
+      readonly current: boolean;
     };
     /**
      * @description * `critical` - Critical
@@ -1570,6 +2049,59 @@ export interface operations {
       };
     };
   };
+  audit_events_list: {
+    parameters: {
+      query?: {
+        /** @description Exact action, e.g. auth.login */
+        action?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        team?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaginatedAuditEventList"];
+        };
+      };
+    };
+  };
+  audit_events_retrieve: {
+    parameters: {
+      query?: {
+        /** @description Exact action, e.g. auth.login */
+        action?: string;
+        team?: number;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this audit event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditEvent"];
+        };
+      };
+    };
+  };
   auth_csrf_retrieve: {
     parameters: {
       query?: never;
@@ -1621,6 +2153,79 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  auth_mfa_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaCodeRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["MfaCodeRequest"];
+        "multipart/form-data": components["schemas"]["MfaCodeRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Me"];
+        };
+      };
+    };
+  };
+  auth_password_reset_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordResetRequestRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["PasswordResetRequestRequest"];
+        "multipart/form-data": components["schemas"]["PasswordResetRequestRequest"];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  auth_password_reset_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordResetConfirmRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["PasswordResetConfirmRequest"];
+        "multipart/form-data": components["schemas"]["PasswordResetConfirmRequest"];
+      };
+    };
     responses: {
       /** @description No response body */
       204: {
@@ -2212,6 +2817,118 @@ export interface operations {
       };
     };
   };
+  me_mfa_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MfaStatus"];
+        };
+      };
+    };
+  };
+  me_mfa_backup_codes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaCodeRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["MfaCodeRequest"];
+        "multipart/form-data": components["schemas"]["MfaCodeRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupCodes"];
+        };
+      };
+    };
+  };
+  me_mfa_confirm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaCodeRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["MfaCodeRequest"];
+        "multipart/form-data": components["schemas"]["MfaCodeRequest"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupCodes"];
+        };
+      };
+    };
+  };
+  me_mfa_disable_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DisableMfaRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["DisableMfaRequest"];
+        "multipart/form-data": components["schemas"]["DisableMfaRequest"];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_mfa_setup_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MfaSetup"];
+        };
+      };
+    };
+  };
   me_notification_rules_list: {
     parameters: {
       query?: never;
@@ -2351,6 +3068,89 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["NotificationRule"];
+        };
+      };
+    };
+  };
+  me_password_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordChangeRequest"];
+        "application/x-www-form-urlencoded": components["schemas"]["PasswordChangeRequest"];
+        "multipart/form-data": components["schemas"]["PasswordChangeRequest"];
+      };
+    };
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_sessions_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Session"][];
+        };
+      };
+    };
+  };
+  me_sessions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this session record. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_sessions_revoke_others_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RevokedCount"];
         };
       };
     };

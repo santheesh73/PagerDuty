@@ -7,13 +7,43 @@ from apps.accounts.models import User
 from apps.incidents import actions as incident_actions
 from apps.incidents.models import Incident, Status
 
-from .models import Service, generate_integration_key
+from .models import Service
 
 
-def rotate_integration_key(service: Service) -> Service:
-    service.integration_key = generate_integration_key()
-    service.save(update_fields=["integration_key", "updated_at"])
-    return service
+def rotate_integration_key(service: Service, *, now: datetime | None = None) -> str:
+    """Issue a new key and return it (the only time it is ever visible). The previous key keeps
+    working for INTEGRATION_KEY_GRACE_HOURS so senders can be updated without losing alerts."""
+    with transaction.atomic():
+        locked = Service.objects.select_for_update().get(pk=service.pk)
+        key = locked.issue_key(now=now)
+        locked.save(
+            update_fields=[
+                "integration_key_hash",
+                "integration_key_prefix",
+                "previous_key_hash",
+                "previous_key_expires_at",
+                "updated_at",
+            ]
+        )
+    service.integration_key = key
+    return key
+
+
+def service_for_key(key: str, *, now: datetime | None = None) -> Service | None:
+    """The service a routing key belongs to: its current key, or the previous one in its grace."""
+    from django.db.models import Q
+
+    from .models import hash_integration_key
+
+    digest = hash_integration_key(key)
+    return (
+        Service.objects.select_related("escalation_policy")
+        .filter(
+            Q(integration_key_hash=digest)
+            | Q(previous_key_hash=digest, previous_key_expires_at__gt=now or timezone.now())
+        )
+        .first()
+    )
 
 
 def set_mode(

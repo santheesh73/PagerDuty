@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.schedules",
     "apps.notifications",
     "apps.analytics",
+    "apps.security",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -56,8 +57,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.security.middleware.MfaEnrolmentMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
+    "apps.security.middleware.SecurityHeadersMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -73,6 +77,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.csp",
             ],
         },
     },
@@ -129,9 +134,19 @@ CACHES = {
     }
 }
 
+# Applied wherever a person chooses a password (reset, change, createsuperuser). Length is what
+# matters most; the common-password list stops the usual suspects. The seeded demo accounts are
+# created directly and are documented as demo-only.
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+PASSWORD_RESET_TIMEOUT = 60 * 60  # reset links expire after an hour
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -145,6 +160,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # The SPA is served from the same site (Vite proxy in dev, one origin in prod), so
 # cookie sessions + CSRF are the simplest secure option: no tokens in localStorage.
 SESSION_COOKIE_HTTPONLY = True
+# An absolute lifetime, not a sliding one: a stolen cookie dies on schedule however busy it is.
+SESSION_COOKIE_AGE = int(os.environ.get("SESSION_HOURS", "12")) * 3600
+# Team admins (and staff) must enrol TOTP before they can do anything else. Off for local dev and
+# the demo stacks, on in production settings unless explicitly disabled.
+REQUIRE_MFA_FOR_ADMINS = env_bool("REQUIRE_MFA_FOR_ADMINS", False)
+# Per-account sign-in lockout, on top of the per-address throttle: this many failures in the
+# window and the account refuses passwords until it ends (whoever is guessing, from wherever).
+LOGIN_LOCKOUT_FAILURES = int(os.environ.get("LOGIN_LOCKOUT_FAILURES", "10"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False  # the SPA reads it to echo X-CSRFToken
@@ -170,6 +194,8 @@ REST_FRAMEWORK = {
         "login": os.environ.get("THROTTLE_LOGIN", "10/min"),
         "events": os.environ.get("THROTTLE_EVENTS", "120/min"),
         "phone_code": os.environ.get("THROTTLE_PHONE_CODE", "5/hour"),
+        "mfa": os.environ.get("THROTTLE_MFA", "10/min"),
+        "password_reset": os.environ.get("THROTTLE_PASSWORD_RESET", "10/hour"),
     },
 }
 
@@ -307,6 +333,35 @@ LOGGING = {
 # Delete resolved incidents (and their alerts, timeline, notifications) older than this many
 # days. 0 = keep everything, which is the default. See docs/DATA_SAFETY.md.
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "0"))
+
+# After rotating a service's integration key the old one keeps working this long.
+INTEGRATION_KEY_GRACE_HOURS = int(os.environ.get("INTEGRATION_KEY_GRACE_HOURS", "24"))
+
+# --- Content Security Policy -------------------------------------------------------------------
+# For the pages Django itself renders (admin, one-tap action links, API docs). The SPA's policy is
+# set by nginx (frontend/docker). CSP_MODE=report-only switches to reporting without enforcing,
+# for trying a stricter policy against real traffic first.
+from django.utils.csp import CSP  # noqa: E402
+
+_CSP_POLICY = {
+    "default-src": [CSP.SELF],
+    "script-src": [CSP.SELF, CSP.NONCE],
+    "style-src": [CSP.SELF, CSP.NONCE],
+    "img-src": [CSP.SELF, "data:"],
+    "font-src": [CSP.SELF],
+    "connect-src": [CSP.SELF],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.NONE],
+    "form-action": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+    "report-uri": "/api/v1/csp-report/",
+}
+CSP_MODE = os.environ.get("CSP_MODE", "enforce")
+SECURE_CSP = _CSP_POLICY if CSP_MODE == "enforce" else {}
+SECURE_CSP_REPORT_ONLY = _CSP_POLICY if CSP_MODE == "report-only" else {}
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
 # --- Notification channels -----------------------------------------------------------------
 # Everything is off until configured; an unconfigured channel fails its notifications

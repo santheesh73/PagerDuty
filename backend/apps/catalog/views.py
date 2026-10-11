@@ -14,6 +14,8 @@ from apps.alerting.actions import Event, ingest
 from apps.core.permissions import IsTeamMember, Role
 from apps.core.views import actor, require_role, scope_to_teams
 from apps.incidents.models import Status
+from apps.security import audit
+from apps.security.audit import AuditedMixin
 
 from . import actions
 from .models import Service
@@ -22,7 +24,9 @@ from .serializers import ServiceModeSerializer, ServiceSerializer, TestAlertResu
 OPEN = ~Q(incidents__status=Status.RESOLVED)
 
 
-class ServiceViewSet(viewsets.ModelViewSet):
+class ServiceViewSet(AuditedMixin, viewsets.ModelViewSet):
+    audit_name = "service"
+
     serializer_class = ServiceSerializer
     permission_classes = [IsTeamMember]
     filterset_fields = ["team", "mode", "escalation_policy"]
@@ -40,15 +44,18 @@ class ServiceViewSet(viewsets.ModelViewSet):
         require_role(self.request.user, serializer.validated_data["team"].pk, Role.ADMIN)
         serializer.save()
 
-    def _fresh(self, service: Service) -> Response:
-        return Response(self.get_serializer(self.get_queryset().get(pk=service.pk)).data)
+    def _fresh(self, service: Service, *, issued_key: str | None = None) -> Response:
+        context = {**self.get_serializer_context(), "issued_key": issued_key}
+        fresh = self.get_queryset().get(pk=service.pk)
+        return Response(self.get_serializer_class()(fresh, context=context).data)
 
     @extend_schema(request=None, responses=ServiceSerializer)
     @action(detail=True, methods=["post"], url_path="rotate-key")
     def rotate_key(self, request: Request, pk: str | None = None) -> Response:
         service = self.get_object()  # IsTeamMember: POST requires team admin
-        actions.rotate_integration_key(service)
-        return self._fresh(service)
+        key = actions.rotate_integration_key(service)
+        audit.record("service.key_rotated", request=request, target=service)
+        return self._fresh(service, issued_key=key)
 
     @extend_schema(request=ServiceModeSerializer, responses=ServiceSerializer)
     @action(detail=True, methods=["post"])

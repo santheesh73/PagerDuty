@@ -8,5 +8,6 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ["name", "team", "escalation_policy", "mode", "mode_until"]
     list_filter = ["mode", "team"]
     search_fields = ["name"]
-    # Never render the integration key in list views or change forms.
-    exclude = ["integration_key"]
+    # Only a hash is stored; show the prefix so admins can tell keys apart.
+    exclude = ["integration_key_hash", "previous_key_hash"]
+    readonly_fields = ["integration_key_prefix", "previous_key_expires_at"]

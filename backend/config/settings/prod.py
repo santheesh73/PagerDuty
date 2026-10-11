@@ -21,9 +21,27 @@ SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
 SECURE_REDIRECT_EXEMPT = [r"^healthz$", r"^readyz$"]
 SESSION_COOKIE_SECURE = env_bool("SECURE_COOKIES", True)
 CSRF_COOKIE_SECURE = env_bool("SECURE_COOKIES", True)
-SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+# On by default: browsers then refuse plain HTTP for this host for a year. Plain-HTTP local
+# stacks (docker-compose.prod.yml on localhost) are unaffected: browsers ignore HSTS sent over
+# HTTP. Subdomains and preload stay opt-in because they are hard to undo (DECISIONS #18).
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", str(365 * 24 * 3600)))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+REQUIRE_MFA_FOR_ADMINS = env_bool("REQUIRE_MFA_FOR_ADMINS", True)
+# "__Host-" cookies are only accepted over HTTPS, for this exact host and path "/": a sibling
+# subdomain cannot set or overwrite them. Only meaningful with secure cookies.
+if SESSION_COOKIE_SECURE:
+    SESSION_COOKIE_NAME = "__Host-sessionid"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
+
+# `check --deploy` warns until HSTS covers subdomains and asks for preload. Both are opt-in on
+# purpose: they apply to every subdomain of the domain, and preload is effectively irreversible.
+# Silenced only while not enabled, so turning them on brings the checks back.
+SILENCED_SYSTEM_CHECKS = [
+    *([] if SECURE_HSTS_INCLUDE_SUBDOMAINS else ["security.W005"]),
+    *([] if SECURE_HSTS_PRELOAD else ["security.W021"]),
+]

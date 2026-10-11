@@ -12,13 +12,16 @@ from rest_framework.views import APIView
 from apps.accounts.serializers import UserSummarySerializer
 from apps.core.permissions import IsTeamMember, Role
 from apps.core.views import require_role, scope_to_teams
+from apps.security.audit import AuditedMixin
 
 from .models import EscalationPolicy
 from .selectors import oncall_overview, policies_with_rules
 from .serializers import EscalationPolicySerializer
 
 
-class EscalationPolicyViewSet(viewsets.ModelViewSet):
+class EscalationPolicyViewSet(AuditedMixin, viewsets.ModelViewSet):
+    audit_name = "escalation_policy"
+
     serializer_class = EscalationPolicySerializer
     permission_classes = [IsTeamMember]
     filterset_fields = ["team"]

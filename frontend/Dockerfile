@@ -26,5 +26,6 @@ RUN npm run build
 FROM nginx:1.29-alpine AS prod
 ENV PORT=80 API_UPSTREAM=http://backend:8000
 COPY docker/nginx.conf /etc/nginx/templates/default.conf.template
+COPY --chmod=0755 docker/15-pulse-headers.envsh /docker-entrypoint.d/15-pulse-headers.envsh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80

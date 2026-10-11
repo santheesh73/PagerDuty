@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import { AppShell } from "@/components/AppShell";
 import { NotFound } from "@/components/NotFound";
 import { LoginPage } from "@/features/auth/LoginPage";
+import { ForgotPasswordPage, ResetPasswordPage } from "@/features/auth/PasswordResetPages";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
@@ -14,9 +15,13 @@ import { SchedulePage } from "@/features/schedules/SchedulePage";
 import { SchedulesPage } from "@/features/schedules/SchedulesPage";
 import { ServiceDetailPage } from "@/features/services/ServiceDetailPage";
 import { ServicesPage } from "@/features/services/ServicesPage";
+import { AuditLogPage } from "@/features/security/AuditLogPage";
+import { SecurityPage } from "@/features/security/SecurityPage";
 
 export const routes = [
   { path: "/login", element: <LoginPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -34,6 +39,8 @@ export const routes = [
           { path: "schedules/:id", element: <SchedulePage /> },
           { path: "analytics", element: <AnalyticsPage /> },
           { path: "notifications", element: <InboxPage /> },
+          { path: "settings/security", element: <SecurityPage /> },
+          { path: "audit-log", element: <AuditLogPage /> },
           { path: "*", element: <NotFound /> },
         ],
       },

@@ -12,4 +12,8 @@ INSTALLED_APPS = [*INSTALLED_APPS, "django_migration_linter"]
 # notification columns are added with a *retained* DEFAULT '' (db_default), which Postgres 11+
 # applies as metadata only and which the previous release can insert around during a rolling
 # deploy. The linter flags any NOT NULL column regardless of a kept default.
-MIGRATION_LINTER_OPTIONS = {"ignore_name": ["0004_channels_rules_contacts"]}
+# 0003_drop_plaintext_integration_key drops a column the previous release reads, on purpose: it
+# removes stored credentials (see the migration and docs/DECISIONS.md).
+MIGRATION_LINTER_OPTIONS = {
+    "ignore_name": ["0004_channels_rules_contacts", "0003_drop_plaintext_integration_key"]
+}

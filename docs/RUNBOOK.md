@@ -62,7 +62,8 @@ Copy `.env.example` to `.env` for local use (it is git-ignored). Compose passes 
 | `METRICS_TOKEN`, `HEARTBEAT_URL`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`/`GIT_SHA` | unset (off) | observability, see [OBSERVABILITY.md](OBSERVABILITY.md): `/metrics` is a 404 without a token |
 | `BACKUP_*`, `RETENTION_DAYS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TX_TIMEOUT_MS`, `DB_CONN_MAX_AGE` | see DATA_SAFETY.md | backups (the compose `backup` service), retention (0 = keep everything), database session limits |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `PUBLIC_BASE_URL`, `ACTION_LINK_TTL_HOURS` | unset (SMS/voice off), FRONTEND_URL, 12 | channels, see [CHANNELS.md](CHANNELS.md) |
-| `SECURE_COOKIES`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` | `1`, `1`, `0` in code | the prod compose sets the first two to `0` for plain-HTTP `localhost`; **set them for real deployments** (HSTS is sticky, see DECISIONS #18) |
+| `REQUIRE_MFA_FOR_ADMINS`, `SESSION_HOURS`, `LOGIN_LOCKOUT_FAILURES`, `LOGIN_LOCKOUT_SECONDS`, `INTEGRATION_KEY_GRACE_HOURS`, `CSP_MODE`, `CSP_CONNECT_EXTRA` | on in prod settings (off in the local compose stacks), 12, 10, 900, 24, enforce, - | see [SECURITY_MODEL.md](SECURITY_MODEL.md) |
+| `SECURE_COOKIES`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` | `1`, `1`, one year in prod settings | the prod compose sets the first two to `0` for plain-HTTP `localhost`; **set them for real deployments** (HSTS is sticky, see DECISIONS #18) |
 
 ## Everyday commands
 

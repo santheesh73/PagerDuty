@@ -46,6 +46,7 @@ class M:
 MATRIX = ["apps/core/tests/test_tenant_matrix.py"]
 SAFE = ["apps/core/tests/test_data_safety.py"]
 CHAN = ["apps/notifications/tests"]
+SEC = ["apps/security/tests"]
 OBS = ["apps/core/tests/test_observability.py"]
 
 MUTATIONS: list[M] = [
@@ -210,6 +211,40 @@ MUTATIONS: list[M] = [
     M("phone-code-attempts", "apps/notifications/views.py",
       "            if contact.phone_code_attempts >= CODE_MAX_ATTEMPTS:",
       "            if False:", CHAN, "unlimited guesses at a 6-digit verification code"),
+    # --- security ---------------------------------------------------------------------------
+    M("mfa-login-gate", "apps/accounts/views.py", "        if mfa.enabled(user):", "        if False:", SEC,
+      "a password alone signs in to an MFA account"),
+    M("totp-replay", "apps/security/totp.py",
+      "        if step > last_step and hmac.compare_digest(hotp(key, step), code):",
+      "        if hmac.compare_digest(hotp(key, step), code):", SEC, "a TOTP code can be replayed"),
+    M("backup-code-single-use", "apps/security/mfa.py",
+      "user=user, code_hash=_code_hash(user.pk, code), used_at__isnull=True",
+      "user=user, code_hash=_code_hash(user.pk, code)", SEC, "a backup code works more than once"),
+    M("mfa-attempt-limit", "apps/security/views.py",
+      '            if pending["tries"] >= PENDING_ATTEMPTS:', "            if False:", SEC,
+      "unlimited guesses at the second factor"),
+    M("mfa-enrolment-gate", "apps/security/middleware.py",
+      "            if mfa.required(user) and not mfa.enabled(user):", "            if False:", SEC,
+      "admins can work without enrolling MFA"),
+    M("login-lockout", "apps/accounts/views.py",
+      "        return int(cache.get(_lockout_key(email)) or 0) >= settings.LOGIN_LOCKOUT_FAILURES",
+      "        return False", SEC, "no per-account lockout"),
+    M("reset-ends-sessions", "apps/security/views.py",
+      "            ended = sessions.revoke(user)  # whoever had the old password is out",
+      "            ended = 0", SEC, "a password reset leaves the attacker's session alive"),
+    M("audit-append-only-trigger", "apps/security/migrations/0002_audit_append_only.py",
+      "    operations = [migrations.RunSQL(FORWARD, REVERSE)]", "    operations = []", SEC,
+      "the database lets audit rows be rewritten", create_db=True),
+    M("key-grace-expiry", "apps/catalog/actions.py",
+      "            | Q(previous_key_hash=digest, previous_key_expires_at__gt=now or timezone.now())",
+      "            | Q(previous_key_hash=digest)", ["apps/catalog/tests"],
+      "a rotated-out key works forever"),
+    M("csp-enforced", "config/settings/base.py",
+      'SECURE_CSP = _CSP_POLICY if CSP_MODE == "enforce" else {}', "SECURE_CSP = {}", SEC,
+      "no Content-Security-Policy on Django pages"),
+    M("admin-password-only-login", "config/urls.py",
+      "admin.site.login = admin_login  # type: ignore[method-assign,assignment]", "", SEC,
+      "the Django admin accepts a password without MFA"),
 ]
 
 
