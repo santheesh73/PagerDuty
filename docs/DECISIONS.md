@@ -207,6 +207,21 @@ peer ranges); React Router 7 (v8 exists; v7 meets the floor with a stable API).
 human-friendly and race-free without a counter row lock. Like any sequence it can skip
 numbers after a rollback; that's acceptable for an identifier.
 
+## 18. HSTS is opt-in, and set to one year in the deploy config
+
+**Decision.** `SECURE_HSTS_SECONDS` defaults to `0` in `config.settings.prod`. The Render
+blueprint sets it to `31536000` (one year), without `includeSubdomains` or `preload`.
+
+**Alternatives.** Default to a year in code; leave it off everywhere.
+
+**Why.** HSTS is sticky: once a browser has seen the header for a host it refuses plain HTTP
+there for the whole period, and the only fix is waiting it out. The same prod settings run
+the documented `docker-compose.prod.yml` stack on `http://localhost:8080`, where a year-long
+default would lock a developer's browser out of `localhost` for a year. So the code stays
+safe-by-default for that case and the deploy that is HTTPS-only turns it on explicitly. It is
+deliberately not preloaded: preload is effectively irreversible and shouldn't be decided by a
+demo blueprint.
+
 ---
 
 ## What the property tests found

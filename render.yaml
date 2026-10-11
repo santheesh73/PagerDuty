@@ -21,6 +21,10 @@ envVarGroups:
         value: https://pulse-web.onrender.com
       - key: SEED_DEMO
         value: "1"
+      # One year. Safe here because Render serves these hosts over HTTPS only; the code default
+      # stays 0 (see docs/DECISIONS.md, "HSTS is opt-in"). No includeSubdomains, no preload.
+      - key: SECURE_HSTS_SECONDS
+        value: "31536000"
       - key: GUNICORN_WORKERS
         value: "2"
       - key: CELERY_CONCURRENCY
