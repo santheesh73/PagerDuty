@@ -39,3 +39,5 @@ doctor-logs.txt
 # Deploy host state (scripts/deploy.sh): secrets and the live/rollback release
 .env.production
 .deploy/
+!.env.example
+!deploy/.env.production.example
