@@ -5,6 +5,7 @@ acknowledge a page because the limiter's store is down would be worse than not l
 """
 
 import logging
+import time
 
 from django.core.cache import cache
 from django.http import HttpRequest
@@ -18,11 +19,37 @@ def client_ident(request: HttpRequest) -> str:
     return BaseThrottle().get_ident(request)  # type: ignore[arg-type]
 
 
+def hit(key: str, window: int) -> int:
+    """Count one event; return how many there have been since the first, within `window` seconds.
+
+    The window opens at the first event and closes `window` seconds later, on any cache backend.
+    Redis keeps a key's TTL on `incr`, but Django's database cache (demo mode) resets it to the
+    300 s default on every `incr`: relying on that once held a one-minute limit closed for good
+    and cut a 15-minute lockout to five. So the window's start is stored, and both keys' expiry is
+    pinned to its end after each count.
+    """
+    now = time.time()
+    cache.add(f"{key}:start", now, timeout=window)
+    started = float(cache.get(f"{key}:start") or now)
+    remaining = max(1, int(started + window - now))
+    cache.add(key, 0, timeout=remaining)
+    hits = int(cache.incr(key))
+    cache.touch(key, timeout=remaining)
+    cache.touch(f"{key}:start", timeout=remaining)
+    return hits
+
+
+def count(key: str) -> int:
+    return int(cache.get(key) or 0)
+
+
+def reset(key: str) -> None:
+    cache.delete_many([key, f"{key}:start"])
+
+
 def allow(scope: str, request: HttpRequest, *, limit: int, window: int = 60) -> bool:
-    key = f"rl:{scope}:{client_ident(request)}"
     try:
-        cache.add(key, 0, timeout=window)
-        return cache.incr(key) <= limit
+        return hit(f"rl:{scope}:{client_ident(request)}", window) <= limit
     except Exception as exc:
         logger.warning("rate limiter unavailable (%s); allowing", type(exc).__name__)
         return True

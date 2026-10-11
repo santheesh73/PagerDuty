@@ -11,6 +11,10 @@ case "$role" in
     # Serialised by an advisory lock: concurrent replicas starting together would otherwise
     # race on a fresh database. No statement timeout: a migration may legitimately be slow.
     DB_STATEMENT_TIMEOUT_MS=0 python manage.py migrate_safely
+    if [ "${DEMO_MODE:-0}" = "1" ]; then
+      # Demo mode keeps its cache (throttles, lockout, idempotency keys) in Postgres.
+      python manage.py createcachetable
+    fi
     if [ "${SEED_DEMO:-0}" = "1" ]; then
       python manage.py seed_demo
     fi
@@ -24,7 +28,7 @@ case "$role" in
     # status, duration, request id) so logs stay structured and never carry query strings.
     exec gunicorn config.wsgi:application \
       --config /app/docker/gunicorn.conf.py \
-      --bind 0.0.0.0:8000 \
+      --bind "0.0.0.0:${PORT:-8000}" \
       --workers "${GUNICORN_WORKERS:-3}" \
       --timeout 30 "$@"
     ;;

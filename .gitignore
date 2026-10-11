@@ -35,3 +35,9 @@ doctor-logs.txt
 
 # Tools fetched by scripts (e.g. scripts/install-trivy.sh)
 .bin/
+
+# Deploy host state (scripts/deploy.sh): secrets and the live/rollback release
+.env.production
+.deploy/
+!.env.example
+!deploy/.env.production.example

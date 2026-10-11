@@ -49,6 +49,7 @@ CHAN = ["apps/notifications/tests"]
 SEC = ["apps/security/tests"]
 OBS = ["apps/core/tests/test_observability.py"]
 API = "apps/core/tests/test_api_quality.py"
+DEMO = "apps/core/tests/test_demo_mode.py"
 
 MUTATIONS: list[M] = [
     # --- tenancy: team scoping on every list endpoint ---------------------------------------
@@ -228,7 +229,7 @@ MUTATIONS: list[M] = [
       "            if mfa.required(user) and not mfa.enabled(user):", "            if False:", SEC,
       "admins can work without enrolling MFA"),
     M("login-lockout", "apps/accounts/views.py",
-      "        return int(cache.get(_lockout_key(email)) or 0) >= settings.LOGIN_LOCKOUT_FAILURES",
+      "        return failures >= settings.LOGIN_LOCKOUT_FAILURES",
       "        return False", SEC, "no per-account lockout"),
     M("reset-ends-sessions", "apps/security/views.py",
       "            ended = sessions.revoke(user)  # whoever had the old password is out",
@@ -281,6 +282,29 @@ MUTATIONS: list[M] = [
       "        request_id = get_request_id()",
       '        request_id = request.headers.get("X-Request-ID", "")', [API],
       "the 500 body echoes raw header input instead of the id the logs carry"),
+    # --- deployment and demo mode (production-readiness, phase 6) --------------------------
+    M("tick-secret-check", "apps/core/tick.py",
+      "    if not hmac.compare_digest(supplied.encode(), settings.TICK_SECRET.encode()):",
+      "    if False:", [DEMO], "anyone can run the tick without the secret"),
+    M("tick-off-by-default", "apps/core/tick.py",
+      "    if not (settings.DEMO_MODE and settings.TICK_SECRET):",
+      "    if not settings.DEMO_MODE:", [DEMO], "an empty TICK_SECRET opens the tick to everyone"),
+    M("tick-rate-limit", "apps/core/tick.py",
+      '    if not ratelimit.allow("tick", request, limit=RATE_LIMIT_PER_MINUTE):',
+      "    if False:", [DEMO], "the tick secret can be guessed at full speed"),
+    M("inline-eta-guard", "apps/core/dispatch.py",
+      "    if eta is not None and eta > timezone.now():", "    if False:", [DEMO],
+      "demo mode runs future work (an escalation, a delayed step) immediately"),
+    M("counter-expiry-pin", "apps/core/ratelimit.py",
+      "    cache.touch(key, timeout=remaining)", "    pass",
+      ["apps/core/tests/test_counters.py"],
+      "on the database cache a 15-minute lockout lasts 5 minutes"),
+    M("demo-account-guard", "apps/core/demo.py",
+      "            settings.DEMO_MODE\n", "            False\n", [DEMO],
+      "a visitor can turn on MFA for a shared demo login and lock everyone out"),
+    M("spa-csp", "apps/core/spa.py",
+      "    return csp_override(policy)(view)", "    return view", [DEMO],
+      "the SPA served by Django gets the nonce policy (or none) instead of its own"),
 ]
 
 

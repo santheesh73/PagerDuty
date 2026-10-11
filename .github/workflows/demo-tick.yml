@@ -1,0 +1,35 @@
+name: Demo tick
+
+# The hosted demo has no Beat (docs/DEPLOY.md): this calls its POST /internal/tick/ every five
+# minutes, so escalation timers fire and the free instance stays awake. It does nothing until
+# the repository has both secrets: PULSE_TICK_URL (https://<host>/internal/tick/) and
+# PULSE_TICK_SECRET. GitHub runs schedules late under load and pauses them in repositories with
+# no activity for 60 days; the demo also ticks itself while it is in use.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: demo-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: POST /internal/tick/
+        env:
+          TICK_URL: ${{ secrets.PULSE_TICK_URL }}
+          TICK_SECRET: ${{ secrets.PULSE_TICK_SECRET }}
+        run: |
+          if [ -z "$TICK_URL" ] || [ -z "$TICK_SECRET" ]; then
+            echo "PULSE_TICK_URL / PULSE_TICK_SECRET are not set: nothing to tick."
+            exit 0
+          fi
+          # A sleeping free instance takes up to a minute to wake.
+          curl -fsS --max-time 120 --retry 2 --retry-delay 15 \
+            -X POST -H "X-Tick-Secret: $TICK_SECRET" "$TICK_URL"

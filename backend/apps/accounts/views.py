@@ -3,7 +3,6 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
-from django.core.cache import cache
 from django.db.models import QuerySet
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
@@ -15,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core import ratelimit
 from apps.core.params import int_param
 from apps.core.permissions import member_team_ids
 from apps.core.throttling import LoginThrottle
@@ -40,23 +40,22 @@ def _lockout_key(email: str) -> str:
 
 def _locked_out(email: str) -> bool:
     try:
-        return int(cache.get(_lockout_key(email)) or 0) >= settings.LOGIN_LOCKOUT_FAILURES
+        failures = ratelimit.count(_lockout_key(email))
+        return failures >= settings.LOGIN_LOCKOUT_FAILURES
     except Exception:
         return False  # Redis down: the per-address throttle still applies
 
 
 def _count_failure(email: str) -> None:
     try:
-        key = _lockout_key(email)
-        cache.add(key, 0, timeout=settings.LOGIN_LOCKOUT_SECONDS)
-        cache.incr(key)
+        ratelimit.hit(_lockout_key(email), settings.LOGIN_LOCKOUT_SECONDS)
     except Exception:
         logger.warning("login lockout counter unavailable")
 
 
 def _clear_failures(email: str) -> None:
     try:
-        cache.delete(_lockout_key(email))
+        ratelimit.reset(_lockout_key(email))
     except Exception:
         logger.warning("login lockout counter unavailable")
 

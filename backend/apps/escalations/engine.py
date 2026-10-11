@@ -177,6 +177,21 @@ def escalate(
         return True
 
 
+def sweep(now: datetime) -> int:
+    """Escalate every incident whose timer has expired. Returns how many moved.
+
+    Run by Beat every 30 s, and by `/internal/tick/` in demo mode, where there is no Beat.
+    """
+    moved = 0
+    for incident_id, level, loop in due_incidents(now):
+        try:
+            moved += escalate(incident_id, level, loop, now)
+        except Exception:
+            # One bad incident must not stall paging for every other incident.
+            logger.exception("sweep escalation failed", extra={"incident_id": incident_id})
+    return moved
+
+
 def due_incidents(now: datetime, limit: int = 500) -> list[tuple[int, int, int]]:
     """(id, level, loop) for every triggered incident whose timer has expired.
 

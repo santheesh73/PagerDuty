@@ -530,3 +530,34 @@ Recorded before fixing. Each fix has a test that fails without it, and a mutatio
   since then that lock alone kept the concurrency test green. Dropping the partial unique index (I1's
   structural guarantee) failed nothing; the full mutation run showed `dedup-index` surviving. A direct
   test now inserts a second open incident for one key and expects `IntegrityError`.
+
+## Deployment (production-readiness, phase 6)
+
+- **The free demo is one container with no Redis and no Celery**, not the full stack with fewer
+  replicas. Free tiers give one web process and no background workers. The design already keeps
+  every timer and every pending page in Postgres, so the workers' job can be split in two. Work due
+  now runs in-process after commit, through the same task code, once, with no retry loop (a task
+  called directly re-raises instead of re-queueing). Everything due later is re-driven by
+  `POST /internal/tick/`. A missed tick delays work and never loses it, which is the same property
+  a lost Celery message already had.
+- **The demo ticks itself while it is in use** (after a response has been sent, at most every
+  30 s). An external scheduler then only matters while nobody is watching. The 5-minute GitHub
+  Actions tick exists but is off until its secrets are set: on a workspace whose free instance-hours
+  are shared with other services, keeping the demo awake around the clock would use them all.
+- **A public demo needs guarding from its visitors.** The shared `@demo.local` logins can't change
+  their password or two-factor settings, and the demo reseeds daily. Without that, one visitor
+  turning on MFA would lock everyone else out until the next reset.
+- **Rollback is a restart, not a rebuild.** Images are tagged with the release SHA and kept on the
+  host, and migrations are never reversed. That is only safe because migrations are expand-only,
+  which `lintmigrations` already enforces.
+
+### What phase 6 found
+
+- **Counters assumed Redis's expiry semantics.** The tick's rate limit, the sign-in lockout and
+  the password-reset cap used `cache.add(key, 0, timeout)` then `cache.incr(key)`. Redis keeps a
+  key's TTL on INCR. Django's database cache implements `incr` as get-then-set, which resets the
+  expiry to the 300 s default. On the demo's cache, steady ticks every 6 s therefore held the
+  one-minute window open for good: the demo doctor saw 20 of 29 ticks refused and no escalation.
+  The 15-minute lockout would also have expired after 5 minutes. `ratelimit.hit` now stores each
+  window's start and pins both keys' expiry to its end. `core/tests/test_counters.py` runs on the
+  database cache and on locmem; three of its tests failed on the database cache before the fix.
