@@ -38,6 +38,8 @@ Test paths are relative to `backend/apps/`.
 | [I15](#i15--a-failing-channel-gives-up-after-bounded-retries) | Failing channels give up | Example-tested |
 | [I16](#i16--teams-are-isolated) | Teams are isolated | Example-tested |
 | [I17](#i17--a-policy-edit-never-changes-an-incident-already-in-flight) | Policy edits don't touch in-flight incidents | Example-tested + simulated |
+| [I18](#i18--a-later-step-of-a-personal-plan-never-fires-for-an-answered-page) | A later step never fires for an answered page | Example-tested + simulated |
+| [I19](#i19--a-later-step-is-never-sent-before-its-time) | A later step is never sent before its time | Example-tested + simulated |
 
 ---
 

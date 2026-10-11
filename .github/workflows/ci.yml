@@ -66,7 +66,9 @@ jobs:
           uv run python manage.py spectacular --file /tmp/openapi.yaml --validate
           diff -u openapi.yaml /tmp/openapi.yaml
       - name: Tests
-        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=85
+        run: uv run pytest --cov --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=85 --junitxml=pytest.xml
+      - name: README numbers match this run (invariants, mutations, tests, coverage)
+        run: python3 ../scripts/readme_numbers.py --check --junit pytest.xml --coverage coverage.xml
       - name: Coverage summary
         if: always()
         run: |
@@ -89,7 +91,9 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
-      - run: npm test
+      - run: npm test -- --reporter=default --reporter=json --outputFile=vitest.json
+      - name: README numbers match this run (frontend tests)
+        run: python3 ../scripts/readme_numbers.py --check --vitest vitest.json
       - run: npm run build
       - name: Bundle budget, and no dev URLs or secrets in the bundle
         run: npm run check:bundle
@@ -311,7 +315,7 @@ jobs:
       - name: Shell scripts pass shellcheck
         run: |
           shellcheck scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
-            scripts/install-trivy.sh
+            scripts/install-trivy.sh scripts/record_demo.sh
 
   backup-drill:
     name: Backup drill (backup · restore · compare · boot API)

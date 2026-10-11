@@ -23,7 +23,7 @@ ROUTING_KEY ?=
 
 
 .PHONY: help up down logs ps migrate seed reseed send-alert chaos-redis doctor doctor-demo db-backup db-restore backup-drill lint-migrations \
-        badge simulate loadtest e2e test test-backend test-frontend \
+        readme-numbers simulate loadtest e2e test test-backend test-frontend \
         lint typecheck format migrations-check check schema shell audit
 
 help: ## Show this help
@@ -116,8 +116,11 @@ format: ## Auto-format everything
 migrations-check: ## Fail if models and migrations have drifted
 	$(BACKEND) python manage.py makemigrations --check --dry-run
 
-badge: ## Refresh docs/img/coverage.svg from the last backend test run (LOCAL)
-	cd backend && uv run pytest -q --cov >/dev/null && cd .. && python3 scripts/coverage_badge.py
+readme-numbers: ## Re-measure the README's numbers and coverage badge (on the host; CI fails if they drift)
+	cd backend && uv run pytest -q --cov --cov-report=xml --junitxml=pytest.xml >/dev/null
+	cd frontend && npm test -- --reporter=dot --reporter=json --outputFile=vitest.json >/dev/null
+	python3 scripts/readme_numbers.py --write \
+	  --junit backend/pytest.xml --coverage backend/coverage.xml --vitest frontend/vitest.json
 
 schema: ## Regenerate OpenAPI schema and the frontend's TS types
 	$(BACKEND) python manage.py spectacular --file openapi.yaml --validate

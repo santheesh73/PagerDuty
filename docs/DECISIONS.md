@@ -561,3 +561,25 @@ Recorded before fixing. Each fix has a test that fails without it, and a mutatio
   The 15-minute lockout would also have expired after 5 minutes. `ratelimit.hit` now stores each
   window's start and pins both keys' expiry to its end. `core/tests/test_counters.py` runs on the
   database cache and on locmem; three of its tests failed on the database cache before the fix.
+
+## Polish (production-readiness, phase 7)
+
+- **The README's numbers are measured, not typed.** Each count (invariants, mutations, backend and
+  frontend tests, coverage) sits between `<!-- n:name -->` markers. `scripts/readme_numbers.py`
+  measures them from the reports CI already produces (pytest's JUnit file and `coverage.xml`,
+  Vitest's JSON) and from `docs/INVARIANTS.md` and `scripts/mutate.py`; each CI job fails if the
+  figures it measured disagree with the README, and `make readme-numbers` rewrites them. The test
+  counts must match exactly; coverage may sit within one point, so a correct change that moves it
+  from 95.1 to 94.9 does not fail. The README used to say "96% line coverage"; the figure is now
+  the statement-and-branch total that `coverage report` prints and `--cov-fail-under` gates
+  (94.9%), which is the number a reviewer re-running the suite would see.
+- **The demo GIF and the social preview are recorded from the running app**
+  (`scripts/record_demo.sh`), so a UI change can be re-shot in two minutes instead of going stale.
+  Frames are Playwright screenshots joined by ffmpeg; Playwright's video recorder needs its own
+  ffmpeg build, which a sandbox or CI image may not have.
+- **`dump.rdb` stays in history unless the owner decides otherwise.** A Redis snapshot was
+  committed in `329163d` and removed (and ignored) in `22ce364`. It holds Celery's queue bindings
+  and one unacknowledged `escalate_incident` message for a local seeded incident: no credentials,
+  keys or personal data. Purging it would rewrite every later commit and need a force-push of
+  `main`, breaking every clone and every PR link for no security gain, so the recommendation is to
+  leave it. Rewriting history is the owner's call, not an automated one.
