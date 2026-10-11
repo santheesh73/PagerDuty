@@ -9,18 +9,24 @@ import hashlib
 import logging
 from typing import Any
 
+from redis.exceptions import RedisError
 from rest_framework.request import Request
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
 
+# Only a broken cache is a reason to let a request through. Anything else (a body too large to
+# read, a bug) must surface: catching everything once logged an oversized request as "throttle
+# backend unavailable" and let it reach the view.
+CACHE_ERRORS: tuple[type[BaseException], ...] = (RedisError, ConnectionError, TimeoutError, OSError)
+
 
 class FailOpenMixin:
     def allow_request(self, request: Request, view: APIView) -> bool:
         try:
             return super().allow_request(request, view)  # type: ignore[misc]
-        except Exception as exc:
+        except CACHE_ERRORS as exc:
             # One line, no traceback: with Redis down this fires on every request.
             logger.warning(
                 "throttle backend unavailable (%s: %s); allowing request",

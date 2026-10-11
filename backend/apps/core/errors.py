@@ -7,6 +7,7 @@ how they map to HTTP, so actions stay free of transport concerns.
 from typing import Any
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
+from django.core.exceptions import RequestDataTooBig
 from django.db.models import ProtectedError, RestrictedError
 from django.http import Http404
 from rest_framework import exceptions, status
@@ -49,6 +50,15 @@ def _envelope(code: str, message: str, details: Any, http_status: int) -> Respon
 def exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     if isinstance(exc, DomainError):
         return _envelope(exc.code, exc.message, exc.details, exc.http_status)
+    if isinstance(exc, RequestDataTooBig):  # a chunked body with no Content-Length to check early
+        from django.conf import settings
+
+        return _envelope(
+            "payload_too_large",
+            f"Request bodies are limited to {settings.DATA_UPLOAD_MAX_MEMORY_SIZE} bytes.",
+            {},
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
     if isinstance(exc, (ProtectedError, RestrictedError)):
         return _envelope(
             "in_use",

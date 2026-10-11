@@ -1,8 +1,4 @@
-from datetime import datetime
-
 from django.db.models import QuerySet
-from django.http import QueryDict
-from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -12,11 +8,12 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from apps.core.pagination import CursorPagination
+from apps.core.params import choices_param, datetime_param, int_param
 from apps.core.permissions import CanRespond, Role, has_role
 from apps.core.views import actor
 
 from . import actions
-from .models import Incident
+from .models import Incident, Status, Urgency
 from .selectors import filter_incidents, timeline, visible_incidents
 from .serializers import (
     AlertSerializer,
@@ -29,16 +26,18 @@ from .serializers import (
 
 
 class IncidentCursorPagination(CursorPagination):
-    ordering = "-triggered_at"
+    # The id breaks ties: incidents opened in the same instant (an alert storm) otherwise come
+    # back in no fixed order, and a cursor over an unstable order skips and repeats rows.
+    ordering = ("-triggered_at", "-id")
 
 
 class TimelineCursorPagination(CursorPagination):
     page_size = 100
-    ordering = "-created_at"
+    ordering = ("-created_at", "-id")
 
 
 class AlertCursorPagination(CursorPagination):
-    ordering = "-received_at"
+    ordering = ("-received_at", "-id")
 
 
 LIST_PARAMS = [
@@ -66,16 +65,19 @@ class IncidentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     @extend_schema(parameters=LIST_PARAMS)
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         params = request.query_params
+        assignee = params.get("assignee") or None
+        if assignee not in (None, "me"):
+            int_param(params, "assignee")  # a user id, or `me`
         incidents = filter_incidents(
             self.get_queryset(),
             user=actor(request),
-            status=[s for s in params.get("status", "").split(",") if s] or None,
-            urgency=params.get("urgency"),
-            service=_int(params, "service"),
-            team=_int(params, "team"),
-            assignee=params.get("assignee"),
-            since=_dt(params, "since"),
-            until=_dt(params, "until"),
+            status=choices_param(params, "status", set(Status.values)),
+            urgency=choices_param(params, "urgency", set(Urgency.values)),
+            service=int_param(params, "service"),
+            team=int_param(params, "team"),
+            assignee=assignee,
+            since=datetime_param(params, "since"),
+            until=datetime_param(params, "until"),
             search=params.get("search"),
         )
         page = self.paginate_queryset(incidents)
@@ -138,23 +140,3 @@ class IncidentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     def alerts(self, request: Request, pk: str | None = None) -> Response:
         page = self.paginate_queryset(self.get_object().alerts.all())
         return self.get_paginated_response(AlertSerializer(page, many=True).data)
-
-
-def _int(params: QueryDict, name: str) -> int | None:
-    raw = params.get(name)
-    if raw in (None, ""):
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        raise ValidationError({name: "Expected an integer."}) from None
-
-
-def _dt(params: QueryDict, name: str) -> datetime | None:
-    raw = params.get(name)
-    if not raw:
-        return None
-    value = parse_datetime(raw)
-    if value is None:
-        raise ValidationError({name: "Expected an ISO-8601 datetime."})
-    return value

@@ -1,0 +1,19 @@
+name: Feature request
+description: Something Pulse should do that it doesn't.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would solve it
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Check the README's non-goals first; some things are out of scope on purpose.

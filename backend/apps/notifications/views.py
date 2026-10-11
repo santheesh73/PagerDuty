@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 from apps.core import limits
 from apps.core.throttling import FailOpenMixin
-from apps.core.views import actor
+from apps.core.views import actor, no_store
 from apps.security import audit
 
 from . import actions, providers
@@ -135,6 +135,7 @@ class ContactView(APIView):
         body = ContactSerializer.of(contact)
         if secret:
             body["webhook_secret"] = secret
+            return no_store(Response(body))
         return Response(body)
 
 
@@ -148,7 +149,7 @@ class RotateWebhookSecretView(APIView):
             contact.webhook_secret = secrets.token_urlsafe(32)
             contact.save(update_fields=["webhook_secret", "updated_at"])
         audit.record("contact.webhook_secret_rotated", request=request)
-        return Response({"webhook_secret": contact.webhook_secret})
+        return no_store(Response({"webhook_secret": contact.webhook_secret}))
 
 
 class SendPhoneCodeView(APIView):

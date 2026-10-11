@@ -1,9 +1,8 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -13,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from apps.accounts.models import User
+from apps.core.params import datetime_param
 from apps.core.permissions import IsTeamMember, Role
 from apps.core.views import require_role, scope_to_teams
 from apps.security.audit import AuditedMixin
@@ -31,13 +31,7 @@ MAX_SHIFT_WINDOW = timedelta(days=62)
 
 
 def _parse_instant(request: Request, name: str, default: datetime) -> datetime:
-    raw = request.query_params.get(name)
-    if not raw:
-        return default
-    value = parse_datetime(raw)
-    if value is None:
-        raise ValidationError({name: "Expected an ISO-8601 datetime."})
-    return value if timezone.is_aware(value) else timezone.make_aware(value, UTC)
+    return datetime_param(request.query_params, name) or default
 
 
 class ScheduleViewSet(AuditedMixin, viewsets.ModelViewSet):
@@ -48,7 +42,7 @@ class ScheduleViewSet(AuditedMixin, viewsets.ModelViewSet):
     filterset_fields = ["team"]
 
     def get_queryset(self) -> QuerySet[Schedule]:
-        return scope_to_teams(schedules_with_layers(), self.request.user).order_by("name")
+        return scope_to_teams(schedules_with_layers(), self.request.user).order_by("name", "id")
 
     def perform_create(self, serializer: BaseSerializer) -> None:
         require_role(self.request.user, serializer.validated_data["team"].pk, Role.ADMIN)
@@ -108,9 +102,9 @@ class OverrideViewSet(AuditedMixin, viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):  # OpenAPI generation
             return ScheduleOverride.objects.none()
         overrides = ScheduleOverride.objects.filter(schedule=self.get_schedule())
-        if since := self.request.query_params.get("since"):
+        if since := datetime_param(self.request.query_params, "since"):
             overrides = overrides.filter(end__gt=since)
-        return overrides.select_related("user").order_by("start")
+        return overrides.select_related("user").order_by("start", "id")
 
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()

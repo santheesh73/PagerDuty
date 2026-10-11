@@ -16,7 +16,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:api": "openapi-typescript ../backend/openapi.yaml -o src/api/schema.d.ts && prettier --write src/api/schema.d.ts"
+    "gen:api": "openapi-typescript ../backend/openapi.yaml -o src/api/schema.d.ts && prettier --write src/api/schema.d.ts",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@sentry/react": "11.6.0",

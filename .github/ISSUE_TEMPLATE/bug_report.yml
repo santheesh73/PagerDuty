@@ -1,0 +1,27 @@
+name: Bug report
+description: Something behaves differently from what the docs or the UI promise.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations: { required: true }
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps, or a request (curl) that shows it. Leave out integration keys and other secrets.
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Commit or deployment
+      description: The commit SHA you ran (`git rev-parse --short HEAD`), or the demo URL.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or request id
+      description: The `X-Request-ID` of a failing request lets us find its log lines.
+      render: text

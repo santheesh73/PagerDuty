@@ -479,3 +479,54 @@ before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line m
   decision about MFA (trust the IdP's or not); a half version would be worse than none.
 - **Found while doing it:** the nginx config never proxied `/a/`, so the one-tap acknowledge links added
   in phase 3 would have served the SPA in the Docker stacks. Fixed, and `make doctor` now checks it.
+
+## Product and supply chain (production-readiness, phase 5)
+
+- **Tenancy: one organisation per deployment**, stated at the top of the README and in
+  [TENANCY.md](TENANCY.md). Teams are the isolation boundary inside it, guarded by the tenant matrix.
+  Real multi-tenancy needs an organisation on every row and Postgres row-level security to fail closed.
+  That is a cross-cutting change with no payoff for what this project demonstrates, and one deployment
+  per organisation isolates more strongly anyway.
+- **One error envelope for everything under `/api/`**: 404s for unknown paths, 413s and 500s too. They
+  used to be Django's HTML pages, which a client can only treat as "something broke". The 500 names the
+  request id the logs carry, never the raw header, and never the exception text.
+- **`Idempotency-Key` is a convenience, not a guarantee.** It lives in Redis, scoped per caller, for 24
+  hours, and is ignored when Redis is down. Paging correctness stays in Postgres, where it was. Responses
+  that carry a one-time secret are `no-store` and leave only a tombstone, so a retry gets 409 rather
+  than a second copy of the key.
+- **Trivy runs as a checksum-pinned binary, not through its GitHub Action.** In March 2026 the action's
+  tags were force-pushed to malicious commits and v0.69.4 was trojaned (CVE-2026-33634). v0.69.3 is an
+  immutable release signed before the attack. All other actions are pinned by commit SHA, and Dependabot
+  moves the SHA and its version comment together.
+- **Lazy routes for everything but the sign-in and incident screens.** The single 269 kB (gzip) bundle is
+  now 146 kB on first load. Analytics, and the charting library it pulls in, load only on that page.
+  `npm run check:bundle` fails CI over 170 kB initial or 130 kB per chunk, and also fails if a dev-server
+  URL or a key-shaped string reaches the bundle.
+
+### What phase 5 found
+
+Recorded before fixing. Each fix has a test that fails without it, and a mutation in
+`scripts/mutate.py`.
+
+- **Cursor pagination skipped and repeated incidents.** Incidents opened in the same instant (an alert
+  storm) had no tie-breaker, and polling 25 of them returned only 15 to 19 distinct rows. Every list
+  now sorts last by its primary key, and a test walks every router list to check it.
+- **Bad query parameters crashed or were silently ignored.** `users?team=abc` and
+  `schedules/{id}/overrides?since=bad` answered 500. `incidents?status=triggred` and `urgency=bogus`
+  returned an empty list, and analytics and the audit log ignored a malformed `team`, so a typo looked
+  like "no incidents". One parser (`core/params.py`) now answers 422 naming the parameter.
+- **The throttles swallowed every exception**, so an oversized body was logged as "throttle backend
+  unavailable" and reached the view. Only cache errors fail open now, and bodies over 1 MiB are refused
+  with 413 before any throttle or view reads them.
+- **The replay store would have kept secrets.** With an `Idempotency-Key`, the response to creating a
+  service, rotating a key, setting up MFA or regenerating backup codes was stored in Redis for 24 hours:
+  the plaintext integration key that phase 4 stopped storing in Postgres. Found while writing the API
+  docs; fixed before the feature shipped.
+- **The images failed their own scan.** nginx ran as root, and the nginx base had 44 fixed-upstream HIGH
+  OS packages. The Python base shipped pip's vendored urllib3 and msgpack, which nothing uses, and the
+  backup image carried `gosu`, built with an old Go runtime that has a CRITICAL advisory. Now nginx runs
+  as `nginx` on 8080, packages are upgraded at build time, and pip and gosu are removed.
+- **The dedup index had stopped being tested.** Phase 0 added a per-key advisory lock to ingest, and
+  since then that lock alone kept the concurrency test green. Dropping the partial unique index (I1's
+  structural guarantee) failed nothing; the full mutation run showed `dedup-index` surviving. A direct
+  test now inserts a second open incident for one key and expects `IntegrityError`.

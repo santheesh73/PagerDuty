@@ -176,17 +176,17 @@ services:
         VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
         VITE_RELEASE: ${GIT_SHA:-}
     environment:
-      PORT: "80"
+      PORT: "8080"
       API_UPSTREAM: http://api:8000
       CSP_MODE: ${CSP_MODE:-enforce}
       CSP_CONNECT_EXTRA: ${CSP_CONNECT_EXTRA:-}
-    ports: ["8080:80"]
+    ports: ["8080:8080"]
     depends_on: { api: { condition: service_healthy } }
     healthcheck:
       # 127.0.0.1, not localhost: BusyBox wget tries ::1 first and does not fall back, and our
       # nginx template listens on IPv4 only, so "localhost" fails on any host with IPv6 enabled
       # (GitHub's runners). Found by CI, not by a machine with IPv6 off.
-      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:80/"]
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 10s
       timeout: 3s
       retries: 12

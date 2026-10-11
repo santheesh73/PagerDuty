@@ -23,7 +23,7 @@ def filter_incidents(
     *,
     user: User,
     status: list[str] | None = None,
-    urgency: str | None = None,
+    urgency: list[str] | None = None,
     service: int | None = None,
     team: int | None = None,
     assignee: str | None = None,
@@ -34,14 +34,14 @@ def filter_incidents(
     if status:
         incidents = incidents.filter(status__in=status)
     if urgency:
-        incidents = incidents.filter(urgency=urgency)
+        incidents = incidents.filter(urgency__in=urgency)
     if service:
         incidents = incidents.filter(service_id=service)
     if team:
         incidents = incidents.filter(service__team_id=team)
     if assignee == "me":
         incidents = incidents.filter(assignee=user)
-    elif assignee and assignee.isdigit():
+    elif assignee:  # the view has checked it is an integer
         incidents = incidents.filter(assignee_id=int(assignee))
     if since:
         incidents = incidents.filter(triggered_at__gte=since)

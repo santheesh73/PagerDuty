@@ -22,9 +22,10 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 from apps.accounts.serializers import MeSerializer
 from apps.core import dispatch, ratelimit
+from apps.core.params import int_param
 from apps.core.permissions import admin_team_ids
 from apps.core.throttling import FailOpenMixin
-from apps.core.views import actor
+from apps.core.views import actor, no_store
 
 from . import audit, mfa, passwords, sessions, totp
 from .models import AuditEvent, SessionRecord
@@ -134,11 +135,13 @@ class MfaSetupView(APIView):
         if mfa.enabled(user):
             return _error("mfa_already_enabled", "Turn MFA off before setting it up again.", 409)
         device = mfa.begin_setup(user)
-        return Response(
-            {
-                "secret": device.secret,
-                "otpauth_uri": totp.provisioning_uri(device.secret, user.email),
-            }
+        return no_store(
+            Response(
+                {
+                    "secret": device.secret,
+                    "otpauth_uri": totp.provisioning_uri(device.secret, user.email),
+                }
+            )
         )
 
 
@@ -155,7 +158,7 @@ class MfaConfirmView(APIView):
                 {"code": "That code is not right. Check the time on your phone."}
             )
         audit.record("mfa.enabled", request=request)
-        return Response({"backup_codes": codes})
+        return no_store(Response({"backup_codes": codes}))
 
 
 class MfaBackupCodesView(APIView):
@@ -169,7 +172,7 @@ class MfaBackupCodesView(APIView):
         if mfa.verify(user, payload.validated_data["code"]) != "totp":
             raise serializers.ValidationError({"code": "Enter a code from your authenticator app."})
         audit.record("mfa.backup_codes_regenerated", request=request)
-        return Response({"backup_codes": mfa.regenerate_backup_codes(user)})
+        return no_store(Response({"backup_codes": mfa.regenerate_backup_codes(user)}))
 
 
 class MfaDisableView(APIView):
@@ -281,7 +284,7 @@ class SessionViewSet(mixins.ListModelMixin, mixins.DestroyModelMixin, viewsets.G
     def get_queryset(self) -> QuerySet[SessionRecord]:
         if getattr(self, "swagger_fake_view", False):
             return SessionRecord.objects.none()
-        return SessionRecord.objects.filter(user=actor(self.request)).order_by("-created_at")
+        return SessionRecord.objects.filter(user=actor(self.request)).order_by("-created_at", "-id")
 
     def perform_destroy(self, instance: SessionRecord) -> None:
         from django.contrib.sessions.models import Session
@@ -323,8 +326,8 @@ class AuditEventViewSet(viewsets.ReadOnlyModelViewSet):
         params = self.request.query_params
         if params.get("action"):
             events = events.filter(action=params["action"])
-        if params.get("team", "").isdigit():
-            events = events.filter(team_id=int(params["team"]))
+        if (team := int_param(params, "team")) is not None:
+            events = events.filter(team_id=team)
         return events.order_by("-created_at", "-id")
 
 

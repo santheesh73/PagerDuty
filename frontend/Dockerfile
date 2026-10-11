@@ -24,8 +24,17 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.29-alpine AS prod
-ENV PORT=80 API_UPSTREAM=http://backend:8000
+# Runs as the unprivileged `nginx` user, not root: it listens on 8080 (no privileged port), keeps
+# its pid file in /tmp, and may write only the config files the entrypoint generates at start.
+ENV PORT=8080 API_UPSTREAM=http://backend:8000
+# `apk upgrade` takes the base image's OS packages up to their fixed versions.
+RUN apk upgrade --no-cache \
+    && sed -i -e '/^user /d' -e 's,^pid .*,pid /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+    && rm -f /etc/nginx/conf.d/default.conf \
+    && touch /etc/nginx/pulse-headers.conf \
+    && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d /etc/nginx/pulse-headers.conf
 COPY docker/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --chmod=0755 docker/15-pulse-headers.envsh /docker-entrypoint.d/15-pulse-headers.envsh
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+USER nginx
+EXPOSE 8080

@@ -27,7 +27,7 @@ class EscalationPolicyViewSet(AuditedMixin, viewsets.ModelViewSet):
     filterset_fields = ["team"]
 
     def get_queryset(self) -> QuerySet[EscalationPolicy]:
-        return scope_to_teams(policies_with_rules(), self.request.user).order_by("name")
+        return scope_to_teams(policies_with_rules(), self.request.user).order_by("name", "id")
 
     def perform_create(self, serializer: BaseSerializer) -> None:
         require_role(self.request.user, serializer.validated_data["team"].pk, Role.ADMIN)

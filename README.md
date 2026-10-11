@@ -11,6 +11,8 @@
 **Live demo:** not deployed yet. [`render.yaml`](render.yaml) deploys the whole stack as a Render Blueprint, re-seeded nightly ([deploy notes](#deploy)).
 **Demo logins** (seeded locally and on the demo): `responder@demo.local` / `demo1234` (on call for Payments), `admin@demo.local` / `demo1234` (team admin).
 
+> **Tenancy: one organisation per deployment.** Teams inside it are isolated from each other on every endpoint, and a test walks every route to prove it. Separate customers are *not* isolated from each other: run one deployment per organisation. See [docs/TENANCY.md](docs/TENANCY.md).
+
 ## What this guarantees
 
 Seventeen written guarantees, each with the mechanism that enforces it and the test that proves it, in [`docs/INVARIANTS.md`](docs/INVARIANTS.md). The ones that matter most:
@@ -124,6 +126,8 @@ Read more: [**Architecture**](docs/ARCHITECTURE.md) (request flow, the timing mo
 | **Notifications** | In-app inbox, email, SMS and voice (Twilio, opt-in) and signed webhooks (Slack/Teams-compatible, SSRF-guarded); personal notification rules with delayed steps; signed one-time acknowledge/resolve links; retries, idempotency keys, dry-run in debug mode. SMS/voice are verified against a fake Twilio, **not a live carrier** ([CHANNELS.md](docs/CHANNELS.md)) |
 | **Analytics** | **Time to first response** (headline), MTTA, MTTR, daily volume, noisiest services, escalation rate |
 
+The API is versioned (`/api/v1/`), described by a committed OpenAPI schema, and answers every error with one JSON envelope. Lists page with a stable total order, filters are validated, and writes accept an `Idempotency-Key` for safe retries. Rate and size limits are documented. See [docs/API.md](docs/API.md).
+
 ## Measured
 
 One run of `make loadtest` (k6 v2.3.0, Events API, 70% repeats of 50 hot dedup keys / 30% never-seen keys, 32 concurrent users for 60 s after a 5 s warm-up):
@@ -145,7 +149,7 @@ make check           # + ruff, mypy, eslint, tsc, prettier, migration drift
 make chaos-redis     # live: wipe Redis mid-incident, confirm it still escalates
 make simulate        # fault-injection simulator over seeds 1-20 (a failure prints its seed)
 make loadtest        # k6 against the prod-like stack, then verify the database
-make e2e             # one Playwright journey: alert, page, escalate, acknowledge, resolve
+make e2e             # Playwright: the alert→resolve journey, plus an axe audit of every main page
 ```
 
 - **Property tests** (`schedules/tests/test_oncall_properties.py`): one responder at any instant, rendered shifts partition the window and agree with `on_call`, handoffs land on local time across DST in six zones, rotation fairness, determinism. They found a real fall-back bug.
@@ -174,7 +178,7 @@ Deliberately out of scope, so the core loop could go deep:
 - public status pages;
 - browser push (SMS, voice and webhooks exist; see [CHANNELS.md](docs/CHANNELS.md));
 - time-of-day restrictions on schedule layers;
-- multi-org tenancy (one org, many teams);
+- multi-org tenancy: one organisation per deployment, many teams ([why](docs/TENANCY.md));
 - user-written routing or grouping rules.
 
 ## License

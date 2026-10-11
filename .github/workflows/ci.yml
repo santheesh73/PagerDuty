@@ -38,8 +38,8 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       HYPOTHESIS_PROFILE: ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.32"
           enable-cache: true
@@ -79,8 +79,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22.22"
           cache: npm
@@ -91,37 +91,101 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Bundle budget, and no dev URLs or secrets in the bundle
+        run: npm run check:bundle
 
   docker:
     name: Docker images build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Backend (prod target)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: backend
           target: prod
           push: false
+          load: true
+          tags: pulse-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
       - name: Backup image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ops/backup/Dockerfile
           push: false
+          load: true
+          tags: pulse-backup:ci
           cache-from: type=gha,scope=backup
           cache-to: type=gha,mode=max,scope=backup
       - name: Frontend (prod target)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: frontend
           target: prod
           push: false
+          load: true
+          tags: pulse-web:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+      - name: Install Trivy (pinned version, checksum-verified)
+        run: ./scripts/install-trivy.sh "$RUNNER_TEMP/bin"
+      - name: SBOM per image (CycloneDX)
+        run: |
+          mkdir -p sbom
+          for image in backend web backup; do
+            "$RUNNER_TEMP/bin/trivy" image --quiet --format cyclonedx \
+              --output "sbom/pulse-$image.cdx.json" "pulse-$image:ci"
+          done
+      - name: Upload SBOMs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-images
+          path: sbom/
+      - name: Images have no fixable HIGH or CRITICAL vulnerabilities (Trivy)
+        run: |
+          for image in pulse-backend:ci pulse-web:ci pulse-backup:ci; do
+            "$RUNNER_TEMP/bin/trivy" image --no-progress --severity HIGH,CRITICAL --ignore-unfixed \
+              --exit-code 1 "$image"
+          done
+
+  supply-chain:
+    name: Supply chain (pip-audit · npm audit · Trivy fs · SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.32"
+      - name: Python dependencies have no known vulnerabilities (pip-audit)
+        working-directory: backend
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.0 --strict --disable-pip --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22.22"
+      - name: npm dependencies have no high or critical advisories
+        run: |
+          (cd frontend && npm audit --audit-level=high)
+          (cd e2e && npm audit --audit-level=high)
+      - name: Install Trivy (pinned version, checksum-verified)
+        run: ./scripts/install-trivy.sh "$RUNNER_TEMP/bin"
+      - name: Lockfiles, Dockerfiles and committed secrets (Trivy fs)
+        run: |
+          "$RUNNER_TEMP/bin/trivy" fs --no-progress --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 .
+      - name: Source SBOM (CycloneDX)
+        run: |
+          "$RUNNER_TEMP/bin/trivy" fs --quiet --format cyclonedx --include-dev-deps \
+            --output sbom-source.cdx.json .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-source
+          path: sbom-source.cdx.json
 
   e2e:
     name: E2E + load smoke (Docker stack)
@@ -135,8 +199,8 @@ jobs:
       # The default 120/min per-key limit protects production; the smoke run needs headroom.
       THROTTLE_EVENTS: 100000/min
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Start the production-like stack
         run: docker compose -f docker-compose.prod.yml up --build -d --wait --wait-timeout 300
       - name: Load smoke (k6) and database invariants
@@ -150,7 +214,7 @@ jobs:
           NEW=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_new_keys']['values']['count'])")
           HOT=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])")
           docker compose -f docker-compose.prod.yml exec -T api python - --run-id "$RUN" --new-keys "$NEW" --hot-requests "$HOT" < loadtest/verify.py
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -163,7 +227,7 @@ jobs:
           npx playwright test
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-traces
           path: e2e/test-results
@@ -176,15 +240,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       # Boots the prod-like stack from scratch, drives the whole alert flow, then kills Redis,
       # the workers, the database and the API in turn and checks it recovers. See scripts/doctor.py.
       - name: make doctor
         run: ./scripts/doctor.sh
       - name: Upload stack logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: doctor-logs
           path: doctor-logs.txt
@@ -193,7 +257,7 @@ jobs:
     name: Ops (promtool alert rules · Grafana JSON · compose overlay)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Alert rules and Prometheus config are valid
         run: |
           docker run --rm --entrypoint promtool -v "$PWD/ops:/ops:ro" prom/prometheus:v3.5.0 check rules /ops/alerts.yml
@@ -230,8 +294,8 @@ jobs:
       DATABASE_URL: postgres://pulse:pulse@localhost:5432/pulse
       REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.11.32"
           enable-cache: true
