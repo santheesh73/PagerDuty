@@ -33,6 +33,13 @@ x-api-env: &api-env
   EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
   EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
   DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-pulse@localhost}
+  # Observability, all off unless set (docs/OBSERVABILITY.md). /metrics answers 404 without a
+  # token; HEARTBEAT_URL is the external dead-man's switch; SENTRY_* enables error reporting.
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  HEARTBEAT_URL: ${HEARTBEAT_URL:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  SENTRY_RELEASE: ${GIT_SHA:-}
 
 x-api: &api
   build:
@@ -133,6 +140,8 @@ services:
       target: prod
       args:
         VITE_SHOW_DEMO_CREDENTIALS: ${SHOW_DEMO_CREDENTIALS:-false}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_RELEASE: ${GIT_SHA:-}
     environment:
       PORT: "80"
       API_UPSTREAM: http://api:8000

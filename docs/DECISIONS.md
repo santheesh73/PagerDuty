@@ -381,3 +381,25 @@ before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line m
   guard is removed.
 - **Method note**: the first mutation run reported a malformed mutation as "caught" because any non-zero
   exit counted. The harness now counts only a real test failure.
+
+
+## Observability (production-readiness, phase 1)
+
+- **State metrics come from the database at scrape time, not from in-process counters.** Pulse runs
+  several gunicorn workers and separate Celery containers; per-process counters of incidents or
+  notifications would be wrong or missing. Postgres is already the source of truth (that is the
+  whole design), so gauges for open incidents, overdue timers and stuck pages are queries. Only
+  request-level metrics (rate, latency, Events API outcomes) are counted in-process, merged across
+  gunicorn workers with prometheus_client multiprocess mode.
+- **`pending` notifications are a gauge, not part of a counter.** A counter that goes down looks like a
+  reset to `rate()`, so only terminal statuses are exposed as `pulse_notifications_total`.
+- **The dead-man's switch pings only while healthy.** A heartbeat that fires regardless proves only
+  that Celery Beat is alive; gating it on the sweeper and delivery checks makes silence mean "Pulse is
+  not paging", which is the thing an operator needs to learn from outside.
+- **`/metrics` is off until a token is set**, and is not proxied by nginx. A secure default beats a
+  convenient one for an endpoint that reveals incident volume.
+- **No gunicorn access log.** The app writes one structured line per request instead, with the route
+  template and no query string, so logs stay JSON and cannot capture a key passed in a URL.
+- New dependencies: `sentry-sdk` (required to report errors at all; imported only when a DSN is set),
+  `prometheus-client` (the standard exposition format and multiprocess aggregation), `@sentry/react`
+  (separate chunk, absent from the bundle unless `VITE_SENTRY_DSN` is set at build).

@@ -15,6 +15,11 @@ FROM deps AS build
 # Public demo deployments show the demo logins on the sign-in page.
 ARG VITE_SHOW_DEMO_CREDENTIALS=false
 ENV VITE_SHOW_DEMO_CREDENTIALS=$VITE_SHOW_DEMO_CREDENTIALS
+# Error reporting is off unless a DSN is given. The release is the git SHA so Sentry can
+# group errors by deploy. (A DSN is a public, write-only identifier; it is not a secret.)
+ARG VITE_SENTRY_DSN=
+ARG VITE_RELEASE=
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN VITE_RELEASE=$VITE_RELEASE
 COPY . .
 RUN npm run build
 

@@ -1,0 +1,126 @@
+# Prometheus alerting rules for Pulse. Check with:  promtool check rules ops/alerts.yml
+# (CI does, and backend/apps/core/tests/test_ops_rules.py asserts every metric used here
+# is really exposed by /metrics, so a renamed metric cannot silently orphan an alert.)
+#
+# Pulse pages other people, so the alerts that matter most are the ones about Pulse itself
+# failing to page. Keep a *second*, external dead-man's switch (HEARTBEAT_URL) for the case
+# where Prometheus or the whole host is down: nothing in this file can report that.
+groups:
+  - name: pulse-paging-path
+    rules:
+      - alert: PulseApiDown
+        expr: up{job="pulse-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Pulse API is not scrapable"
+          runbook: "docs/RUNBOOK.md#common-failures"
+
+      - alert: PulseBeatStalled
+        expr: time() - pulse_beat_last_run_timestamp_seconds > 180
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Celery Beat has not run for over 3 minutes"
+          description: "Escalation sweeps and stuck-page recovery are driven by Beat. Exactly one beat process must run."
+          runbook: "docs/OBSERVABILITY.md#beat-stalled"
+
+      - alert: PulseBeatNeverSeen
+        expr: absent(pulse_beat_last_run_timestamp_seconds)
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "No Beat heartbeat has ever been recorded (or Redis was wiped and Beat is down)"
+          runbook: "docs/OBSERVABILITY.md#beat-stalled"
+
+      - alert: PulseNoWorkers
+        expr: pulse_celery_workers == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "No Celery worker answers a ping"
+          runbook: "docs/OBSERVABILITY.md#no-workers"
+
+      - alert: PulseBrokerDown
+        expr: pulse_celery_broker_up == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Redis (Celery broker) is unreachable; alerts are still accepted, the sweeper pages late"
+          runbook: "docs/RUNBOOK.md#common-failures"
+
+      - alert: PulseEscalationSweeperLag
+        expr: pulse_escalation_sweeper_lag_seconds > 120
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "An escalation timer has been overdue for {{ $value | humanizeDuration }}"
+          description: "Incidents are not moving up the policy. The sweeper runs every 30 s, so anything above ~60 s is abnormal."
+          runbook: "docs/OBSERVABILITY.md#sweeper-lag"
+
+      - alert: PulseEscalationsOverdue
+        expr: pulse_escalations_overdue > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} escalation(s) overdue for 5+ minutes"
+          runbook: "docs/OBSERVABILITY.md#sweeper-lag"
+
+      - alert: PulseNotificationsStuck
+        expr: pulse_notifications_stuck > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $value }} page(s) pending for over 5 minutes"
+          description: "A page was created but never delivered and redelivery is not recovering it."
+          runbook: "docs/OBSERVABILITY.md#stuck-notifications"
+
+      - alert: PulseNotificationFailures
+        expr: increase(pulse_notifications_total{status="failed"}[15m]) > 0
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} notification(s) exhausted their retries in the last 15 minutes"
+          runbook: "docs/OBSERVABILITY.md#stuck-notifications"
+
+      - alert: PulseDeliverySlow
+        expr: histogram_quantile(0.95, sum by (le) (increase(pulse_notification_delivery_seconds_bucket[15m]))) > 60
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 time from page created to sent is over 60 s"
+          runbook: "docs/OBSERVABILITY.md#stuck-notifications"
+
+  - name: pulse-ingest-and-api
+    rules:
+      - alert: PulseIngestRejectingServerErrors
+        expr: sum(rate(pulse_ingest_requests_total{result=~"rejected_5.."}[5m])) > 0
+        for: 3m
+        labels: {severity: critical}
+        annotations:
+          summary: "The Events API is returning 5xx: monitoring alerts are being dropped"
+          runbook: "docs/OBSERVABILITY.md#ingest-errors"
+
+      - alert: PulseIngestSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(pulse_ingest_latency_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Events API p99 latency above 1 s"
+
+      - alert: PulseHigh5xxRate
+        expr: |
+          sum(rate(pulse_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(pulse_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 5% of API requests are failing with 5xx"
+
+      - alert: PulseEscalationQueueBacklog
+        expr: pulse_celery_queue_depth{queue="escalations"} > 100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "The escalations queue is backing up"
+          runbook: "docs/OBSERVABILITY.md#no-workers"

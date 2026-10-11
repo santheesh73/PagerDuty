@@ -59,6 +59,7 @@ Copy `.env.example` to `.env` for local use (it is git-ignored). Compose passes 
 | `NUM_PROXIES` | unset (dev), `1` (prod compose) | reverse proxies you trust to append to `X-Forwarded-For`; used for throttling. Unset trusts the whole header (spoofable) |
 | `THROTTLE_LOGIN`, `THROTTLE_EVENTS` | `10/min`, `120/min` (per key) | rate limits |
 | `GUNICORN_WORKERS`, `CELERY_CONCURRENCY`, `CELERY_QUEUES` | `3`, `4`, all three queues | the compose files give `worker-escalations` `CELERY_QUEUES=escalations` |
+| `METRICS_TOKEN`, `HEARTBEAT_URL`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`/`GIT_SHA` | unset (off) | observability, see [OBSERVABILITY.md](OBSERVABILITY.md): `/metrics` is a 404 without a token |
 | `SECURE_COOKIES`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` | `1`, `1`, `0` in code | the prod compose sets the first two to `0` for plain-HTTP `localhost`; **set them for real deployments** (HSTS is sticky, see DECISIONS #18) |
 
 ## Everyday commands

@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.catalog.models import Service
-from apps.core import limits
+from apps.core import limits, metrics
 from apps.core.errors import DomainError
 from apps.core.throttling import RoutingKeyThrottle
 
@@ -71,6 +71,7 @@ class EventsView(APIView):
                 custom_details=body.get("custom_details") or {},
             ),
         )
+        metrics.INGEST_REQUESTS.labels(result.status).inc()
         return Response(
             EventResultSerializer(
                 {

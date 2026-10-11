@@ -48,6 +48,7 @@ AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "apps.core.middleware.RequestIDMiddleware",
+    "apps.core.middleware.ObservabilityMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -176,6 +177,7 @@ CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
     "apps.escalations.tasks.*": {"queue": "escalations"},
     "apps.notifications.tasks.*": {"queue": "notifications"},
+    "apps.core.tasks.*": {"queue": "default"},
 }
 CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     "sweep-due-escalations": {
@@ -184,6 +186,10 @@ CELERY_BEAT_SCHEDULE: dict[str, dict] = {
     },
     "expire-service-modes": {
         "task": "apps.catalog.tasks.expire_service_modes",
+        "schedule": timedelta(seconds=60),
+    },
+    "ops-heartbeat": {
+        "task": "apps.core.tasks.heartbeat_task",
         "schedule": timedelta(seconds=60),
     },
     "sweep-stuck-notifications": {
@@ -224,7 +230,10 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {"request_id": {"()": "apps.core.logging.RequestIDFilter"}},
+    "filters": {
+        "request_id": {"()": "apps.core.logging.RequestIDFilter"},
+        "redact_request": {"()": "apps.core.logging.RedactRequestFilter"},
+    },
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.json.JsonFormatter",
@@ -236,7 +245,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
-            "filters": ["request_id"],
+            "filters": ["request_id", "redact_request"],
         },
     },
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
@@ -245,3 +254,27 @@ LOGGING = {
         "celery": {"level": "INFO"},
     },
 }
+
+# --- Observability ---------------------------------------------------------
+# Everything here is off unless configured; see docs/OBSERVABILITY.md.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT", "production")
+SENTRY_RELEASE = os.environ.get("SENTRY_RELEASE") or os.environ.get("GIT_SHA") or None
+SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0"))
+if SENTRY_DSN:
+    from apps.core import sentry as _sentry
+
+    _sentry.init(
+        SENTRY_DSN,
+        environment=SENTRY_ENVIRONMENT,
+        release=SENTRY_RELEASE,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+    )
+
+# /metrics is disabled (404) unless a bearer token is configured. nginx does not proxy it, so
+# it is reachable only on the internal network either way.
+METRICS_TOKEN = os.environ.get("METRICS_TOKEN", "")
+# Dead-man's switch: Beat -> worker -> GET this URL every minute. Silence means Pulse is down.
+HEARTBEAT_URL = os.environ.get("HEARTBEAT_URL", "")
+# Keep the JSON handler Django configured instead of Celery replacing it (worker logs stay JSON).
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False

@@ -44,6 +44,7 @@ class M:
 
 
 MATRIX = ["apps/core/tests/test_tenant_matrix.py"]
+OBS = ["apps/core/tests/test_observability.py"]
 
 MUTATIONS: list[M] = [
     # --- tenancy: team scoping on every list endpoint ---------------------------------------
@@ -131,6 +132,24 @@ MUTATIONS: list[M] = [
     M("maintenance-guard", "apps/notifications/actions.py",
       "    if incident.is_maintenance:\n        return []", "    if False:\n        return []",
       ["apps/alerting/tests/test_ingest.py"], "maintenance incidents can page"),
+    # --- observability ----------------------------------------------------------------------
+    M("metrics-auth", "apps/core/metrics.py",
+      "    if not hmac.compare_digest(supplied.encode(), token.encode()):", "    if False:",
+      OBS, "/metrics readable without the token"),
+    M("metrics-disabled-by-default", "apps/core/metrics.py", "    if not token:\n        raise Http404",
+      "    if False:\n        raise Http404", OBS, "/metrics open when no token is configured"),
+    M("sweeper-lag-filter", "apps/core/selfcheck.py",
+      "        status=Status.TRIGGERED, next_escalation_at__lte=now\n    ).aggregate",
+      "        next_escalation_at__lte=now\n    ).aggregate", OBS,
+      "sweeper-lag gauge counts incidents that no longer escalate"),
+    M("heartbeat-health-gate", "apps/core/tasks.py",
+      "    if all(c.ok for c in selfcheck.run(include_beat=False)):", "    if True:", OBS,
+      "dead-man's switch pings even while the sweeper is stalled"),
+    M("sentry-secret-keys", "apps/core/sentry.py", 'r"pass|secret|token|', 'r"secret|token|', OBS,
+      "Sentry events keep password fields"),
+    M("log-request-redaction", "apps/core/logging.py", "            record.request = None",
+      "            record.request = record.request", OBS,
+      "django.request log records keep the query string"),
 ]
 
 
