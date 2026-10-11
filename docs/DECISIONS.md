@@ -239,3 +239,44 @@ nowhere near the repeated hour. The property generator weights handoffs towards
 them; the database constraint checked only `NOT NULL`, so the admin could save a zero or
 negative turn and every `on_call` for that schedule would raise. A `CHECK
 (turn_length > 0)` constraint (`layer_turn_length_positive`) now refuses it.
+
+---
+
+## What the simulator found
+
+`manage.py simulate --seed N` (see [`INVARIANTS.md`](INVARIANTS.md)) drives the real code against
+a real Postgres with a virtual clock and injected faults: broker down, messages lost and
+duplicated, a worker dying after writing pages but before commit, concurrent sweepers, clock
+skew, policies edited mid-flight, service modes flipped mid-flight, and a flaky email channel.
+`apps/core/invariants.py` runs after every operation. Each defect below has a focused
+regression test that fails against the old code.
+
+### S1. Human actions paged people from a maintenance incident (I13)
+
+**Found by** seed 20261011, first run. **Cause.** I13 was enforced where an incident opens
+(`open_incident` returns before paging), but `unacknowledge` and `reassign` call `page()`
+directly, and manual `escalate` walks the policy. Acknowledge then unacknowledge on a
+maintenance incident paged the on-call. **Fix.** `page()` refuses maintenance incidents, and
+manual escalate on one is a `Conflict`. **Regression.**
+`test_human_actions_on_a_maintenance_incident_never_page` fails 3 of 3 cases without it.
+
+### S2. A delayed page woke someone for an incident that was already resolved (C1)
+
+**Cause.** `deliver` checked the row's status and the service mode but not the incident. A
+notification queued before resolution (broker outage, retry backoff, a lost message re-driven
+by the sweeper) was sent afterwards. **Fix.** `deliver` marks it `cancelled` when the incident
+is resolved (new status, migration `0002`). **Regression.**
+`test_a_page_queued_before_resolution_is_never_sent_after_it` fails without the guard
+(`sent` instead of `cancelled`).
+
+### Two things about the simulator itself
+
+- **It could not see S2 at first.** `deliver` deliberately catches every exception a channel
+  raises (a poison message must not be retried forever), so a violation raised from inside
+  the simulated `send` was swallowed as a failed notification. With the fix removed, 26 seeds
+  passed. Violations seen inside `send` are now recorded and raised by the step loop; with
+  the S2 fix removed, seeds 1 and 2 now fail within seconds. A checker that cannot fail was
+  worth nothing, so this is the check that was verified, not assumed.
+- **A checker gap, not a product bug.** Seed 1 reported I9 (`first_response_at` set with no
+  human event) for an incident whose human resolve is recorded as `maintenance_ended`
+  rather than `resolved`. The checker now counts that event.

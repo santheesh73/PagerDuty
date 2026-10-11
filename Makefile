@@ -67,6 +67,9 @@ test-backend: ## Backend tests with coverage (fails under 85%)
 test-frontend: ## Frontend tests
 	$(FRONTEND) npm test
 
+simulate: ## Fault-injection simulator over seeds 1-20 (SEEDS=n, OPS=n to change)
+	cd backend && uv run python manage.py simulate --seeds $${SEEDS:-20} --operations $${OPS:-600}
+
 test: test-backend test-frontend ## All tests
 
 lint: ## Ruff + ESLint + Prettier

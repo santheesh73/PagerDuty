@@ -955,9 +955,10 @@ export interface components {
      *     * `sent` - Sent
      *     * `failed` - Failed
      *     * `dry_run` - Dry run
+     *     * `cancelled` - Cancelled
      * @enum {string}
      */
-    NotificationStatusEnum: "pending" | "sent" | "failed" | "dry_run";
+    NotificationStatusEnum: "pending" | "sent" | "failed" | "dry_run" | "cancelled";
     OnCallEntry: {
       user: components["schemas"]["UserSummary"] | null;
       schedule: components["schemas"]["ScheduleRef"] | null;

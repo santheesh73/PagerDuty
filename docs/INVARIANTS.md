@@ -15,7 +15,7 @@ This is the contract the rest of the repository exists to keep. Every invariant 
 | **Enforced by Postgres** | A constraint makes violation impossible; tests show the application copes with it. |
 | **Example-tested** | Hand-written tests cover the cases someone thought of. Upgraded below where noted. |
 | **Property-tested** | Hypothesis generates the cases (Phase 2: `test_oncall_properties.py`). |
-| **Simulated** | Checked after every operation of the seeded fault simulator (Phase 3: `assert_invariants`). |
+| **Simulated** | Checked after every operation of the seeded fault simulator (`apps/core/invariants.py`, run by `manage.py simulate`). |
 
 Test paths are relative to `backend/apps/`.
 
@@ -25,19 +25,19 @@ Test paths are relative to `backend/apps/`.
 | [I2](#i2--a-schedule-resolves-to-exactly-one-responder-at-any-instant-or-to-nobody) | A schedule resolves to one member or nobody | Property-tested |
 | [I3](#i3--render_shifts-is-a-true-partition-that-agrees-with-on_call) | Rendered shifts partition the window and agree with `on_call` | Property-tested |
 | [I4](#i4--no-page-is-ever-duplicated) | No page is ever duplicated | Postgres unique key + guarded update |
-| [I5](#i5--no-page-is-ever-lost) | No page is ever lost | Example-tested → Phase 3 |
-| [I6](#i6--escalation-terminates) | Escalation terminates | Example-tested → Phase 3 |
-| [I7](#i7--no-stuck-timers) | No stuck timers | Example-tested → Phase 3 |
-| [I8](#i8--a-non-triggered-incident-never-has-a-live-timer) | Only triggered incidents have a timer | Example-tested → Phase 3 |
-| [I9](#i9--first_response_at-is-set-at-most-once-only-by-a-human) | First response is set once, only by a human | Example-tested → Phase 3 |
-| [I10](#i10--every-state-transition-writes-exactly-one-timeline-event) | One timeline event per transition | Example-tested → Phase 3 |
+| [I5](#i5--no-page-is-ever-lost) | No page is ever lost | Example-tested + simulated |
+| [I6](#i6--escalation-terminates) | Escalation terminates | Example-tested + simulated |
+| [I7](#i7--no-stuck-timers) | No stuck timers | Example-tested + simulated |
+| [I8](#i8--a-non-triggered-incident-never-has-a-live-timer) | Only triggered incidents have a timer | Example-tested + simulated |
+| [I9](#i9--first_response_at-is-set-at-most-once-only-by-a-human) | First response is set once, only by a human | Example-tested + simulated |
+| [I10](#i10--every-state-transition-writes-exactly-one-timeline-event) | One timeline event per transition | Example-tested + simulated |
 | [I11](#i11--daily-and-weekly-handoffs-happen-at-the-configured-local-time-across-dst) | Handoffs at local time across DST | Property-tested |
-| [I12](#i12--debug-mode-never-sends-a-page) | Debug mode never sends | Example-tested → Phase 3 |
-| [I13](#i13--maintenance-incidents-never-page-and-never-escalate) | Maintenance never pages | Example-tested → Phase 3 |
+| [I12](#i12--debug-mode-never-sends-a-page) | Debug mode never sends | Example-tested + simulated |
+| [I13](#i13--maintenance-incidents-never-page-and-never-escalate) | Maintenance never pages | Example-tested + simulated |
 | [I14](#i14--suppression-windows-are-bounded) | Suppression windows are bounded | Example-tested |
 | [I15](#i15--a-failing-channel-gives-up-after-bounded-retries) | Failing channels give up | Example-tested |
 | [I16](#i16--teams-are-isolated) | Teams are isolated | Example-tested |
-| [I17](#i17--a-policy-edit-never-changes-an-incident-already-in-flight) | Policy edits don't touch in-flight incidents | Example-tested → Phase 3 |
+| [I17](#i17--a-policy-edit-never-changes-an-incident-already-in-flight) | Policy edits don't touch in-flight incidents | Example-tested + simulated |
 
 ---
 
@@ -49,7 +49,7 @@ Two identical alerts, however they interleave, become one incident with two aler
 
 - **Mechanism.** Partial unique index `uniq_open_incident_per_dedup_key` on `(service_id, dedup_key) WHERE status <> 'resolved'`. Ingest attaches to an open incident under `SELECT … FOR UPDATE`; a concurrent insert that loses the race gets `IntegrityError`, and the retry attaches to the winner (`alerting/actions.py::_trigger`). A resolved incident frees its key, so a later trigger opens a new incident.
 - **Proof.** `alerting/tests/test_ingest.py::test_concurrent_triggers_with_one_key_create_exactly_one_incident` (8 threads, one key → one incident, 8 alerts) · `test_same_dedup_key_attaches_to_the_open_incident` · `test_trigger_after_resolve_opens_a_new_incident` · `test_dedup_is_scoped_to_the_service`.
-- **Status.** Enforced by Postgres. Example-tested for the attach/retry path. Simulated in Phase 3, with colliding keys under every fault type.
+- **Status.** Enforced by Postgres. Example-tested for the attach/retry path. Simulated, with colliding keys under every fault type.
 
 ### I4 — No page is ever duplicated
 
@@ -60,7 +60,7 @@ At most one `Notification` row exists per `(incident, level, loop, seq, user, ch
   2. The engine's guarded query (`escalations/engine.py::escalate`) only matches an incident still triggered, at the expected level and loop, and already due, under `SELECT … FOR UPDATE SKIP LOCKED`. A second caller matches nothing.
   3. Delivery locks the row and sends only while `status = 'pending'` (`notifications/actions.py::deliver`).
 - **Proof.** `escalations/tests/test_engine.py::test_eta_task_and_sweeper_double_fire_pages_once` · `test_concurrent_escalations_of_one_incident_page_once` (4 threads) · `notifications/tests/test_delivery.py::test_paging_twice_never_double_pages` · `test_redelivery_of_a_sent_notification_is_a_no_op` · `alerting/tests/test_ingest.py::test_duplicates_do_not_page_again`.
-- **Status.** Row uniqueness is enforced by Postgres. Single delivery is example-tested. Simulated in Phase 3, with tasks executed twice and concurrent sweepers.
+- **Status.** Row uniqueness is enforced by Postgres. Single delivery is example-tested. Simulated, with tasks executed twice and concurrent sweepers.
 
 ### I5 — No page is ever lost
 
@@ -68,7 +68,7 @@ If an escalation step decides to page a reachable responder, a `Notification` ro
 
 - **Mechanism.** Rows are written in the *same transaction* as the decision to page (open, escalate, unacknowledge, reassign), never by a later task. Enqueueing happens only after commit (`core/dispatch.py::on_commit`), and a broker failure is logged rather than raised. `sweep_stuck_notifications` re-dispatches rows still pending after two minutes. The escalation itself is recovered by the sweeper (I7).
 - **Proof.** `escalations/tests/test_engine.py::test_broker_outage_does_not_fail_ingest` · `test_sweeper_recovers_when_the_eta_message_is_lost` · `notifications/tests/test_delivery.py::test_sweeper_redispatches_pending_rows_whose_task_was_lost` · `notifications/tests/test_poison_delivery.py::test_unexpected_error_eventually_marks_failed`. Live: `make chaos-redis`.
-- **Status.** Example-tested. Simulated in Phase 3: every paging event's recipients must have rows, and the drained system must have no pending rows.
+- **Status.** Example-tested. Simulated: every paging event's recipients must have rows, and the drained system must have no pending rows.
 
 ### I6 — Escalation terminates
 
@@ -76,7 +76,7 @@ Without human intervention, no incident escalates forever. After at most `levels
 
 - **Mechanism.** `escalations/snapshot.py::next_step` walks levels, then loops, and returns `None` after the last level of the last loop; the engine then clears `next_escalation_at` and logs `escalation_exhausted`. The snapshot is frozen, and `num_loops ≤ 3` is a `CHECK` constraint (`policy_num_loops_max_3`). Levels per policy are capped at 10 (`core/limits.py`).
 - **Proof.** `escalations/tests/test_engine.py::test_exhausts_after_the_last_level_when_no_loops_remain` · `test_loops_back_to_level_zero_when_loops_remain` · `escalations/tests/test_snapshot.py::test_next_step_walks_levels_then_loops` · `test_next_step_on_an_empty_policy_is_exhausted`.
-- **Status.** Example-tested. Simulated in Phase 3: the step count per incident is bounded, and a drained system has no live timers on unattended incidents.
+- **Status.** Example-tested. Simulated: the step count per incident is bounded, and a drained system has no live timers on unattended incidents.
 
 ### I7 — No stuck timers
 
@@ -84,7 +84,7 @@ A triggered incident with a non-null `next_escalation_at` always makes progress 
 
 - **Mechanism.** The sweeper selects every `status = 'triggered' AND next_escalation_at <= now` (`escalations/engine.py::due_incidents`) and calls the guarded `escalate`, which either advances (`apply_level`) or clears the timer (exhausted). An empty level sets `next_escalation_at = now` (high urgency) instead of `now + delay`. An empty policy never sets a timer at all.
 - **Proof.** `escalations/tests/test_engine.py::test_no_responder_moves_to_the_next_level_on_the_next_sweep` · `alerting/tests/test_ingest.py::test_ingest_without_a_policy_target_still_records_the_incident`.
-- **Status.** Example-tested. Simulated in Phase 3: after every sweep, each incident that was due has advanced or cleared.
+- **Status.** Example-tested. Simulated: after every sweep, each incident that was due has advanced or cleared.
 
 ### I8 — A non-triggered incident never has a live timer
 
@@ -92,7 +92,7 @@ A triggered incident with a non-null `next_escalation_at` always makes progress 
 
 - **Mechanism.** `acknowledge` and `resolve` clear the timer in the same locked update that changes the status (`incidents/actions.py`). Every path back to `triggered` (unacknowledge, reassign, manual escalate) sets it from the snapshot. The engine only touches incidents whose guarded query requires `status = 'triggered'`.
 - **Proof.** `escalations/tests/test_engine.py::test_ack_stops_escalation` · `incidents/tests/test_state_machine.py::test_resolve_resolves_attached_alerts_and_clears_the_timer` · `alerting/tests/test_ingest.py::test_acknowledge_event_by_dedup_key`.
-- **Status.** Example-tested. Simulated in Phase 3 after every operation. (A database `CHECK` would make this structural; it is a candidate for a follow-up migration once the simulator has confirmed no code path violates it.)
+- **Status.** Example-tested. Simulated after every operation. (A database `CHECK` would make this structural; it is a candidate for a follow-up migration once the simulator has confirmed no code path violates it.)
 
 ### I9 — `first_response_at` is set at most once, only by a human
 
@@ -100,7 +100,7 @@ It is set by the first human acknowledge, unacknowledge, resolve, reassign or ma
 
 - **Mechanism.** One place, `incidents/actions.py::_transition`: only when `actor is not None`, the action is in `FIRST_RESPONSE_ACTIONS`, and the field is still null. Events API transitions pass `actor=None`.
 - **Proof.** `incidents/tests/test_state_machine.py::test_first_response_is_set_once_by_the_first_human_action` · `test_every_human_action_counts_as_first_response` (parametrised over all five) · `alerting/tests/test_ingest.py::test_acknowledge_event_by_dedup_key` · `test_resolve_event_by_dedup_key` · `analytics/tests/test_analytics.py::test_source_driven_resolves_do_not_count_as_first_response`.
-- **Status.** Example-tested. Simulated in Phase 3: once set it never changes, and it always equals the time of a human first-response event.
+- **Status.** Example-tested. Simulated: once set it never changes, and it always equals the time of a human first-response event.
 
 ### I10 — Every state transition writes exactly one timeline event
 
@@ -108,7 +108,7 @@ Each incident action (acknowledge, unacknowledge, resolve, reassign, manual esca
 
 - **Mechanism.** Each action in `incidents/actions.py` and each branch of `escalations/engine.py::escalate` calls `timeline.record` exactly once, inside the same transaction as the state change, so the event and the change commit or roll back together.
 - **Proof.** `incidents/tests/test_state_machine.py::test_transition_table_is_enforced` (every action × every status: each allowed transition adds exactly one non-delivery event; each forbidden one raises `InvalidTransition` inside the transaction, so nothing commits).
-- **Status.** Example-tested. Simulated in Phase 3: event deltas are checked against every operation's outcome.
+- **Status.** Example-tested. Simulated: event deltas are checked against every operation's outcome.
 
 ---
 
@@ -153,15 +153,15 @@ A service in debug mode runs the whole pipeline (incident, escalation, timeline)
 
 - **Mechanism.** `notifications/actions.py::page` creates `dry_run` rows for a debug service; `deliver` re-checks the service mode under the row lock before sending.
 - **Proof.** `escalations/tests/test_engine.py::test_debug_mode_runs_the_pipeline_but_only_records_dry_runs` · `notifications/tests/test_delivery.py::test_switching_to_debug_after_paging_still_never_sends`.
-- **Status.** Example-tested. Simulated in Phase 3 with the mode flipped mid-flight.
+- **Status.** Example-tested. Simulated with the mode flipped mid-flight.
 
 ### I13 — Maintenance incidents never page and never escalate
 
 In maintenance mode every alert folds into one low-urgency incident per service, with no notifications and no timer. It resolves when the window ends.
 
-- **Mechanism.** `alerting/actions.py::_trigger` routes to the reserved `__maintenance__` dedup key. `incidents/actions.py::open_incident` returns before `apply_level`/`page` for maintenance incidents. `catalog/actions.py::expire_service_modes` ends the window.
-- **Proof.** `alerting/tests/test_ingest.py::test_maintenance_consolidates_every_alert_into_one_quiet_incident` · `test_mode_expiry_returns_service_to_active_and_closes_maintenance`.
-- **Status.** Example-tested. Simulated in Phase 3.
+- **Mechanism.** `alerting/actions.py::_trigger` routes to the reserved `__maintenance__` dedup key. `incidents/actions.py::open_incident` returns before `apply_level`/`page` for maintenance incidents. `notifications/actions.py::page` refuses maintenance incidents outright, so no human action (unacknowledge, reassign) can page, and manual escalate on one is a `Conflict`. `catalog/actions.py::expire_service_modes` ends the window.
+- **Proof.** `alerting/tests/test_ingest.py::test_maintenance_consolidates_every_alert_into_one_quiet_incident` · `test_human_actions_on_a_maintenance_incident_never_page` · `test_mode_expiry_returns_service_to_active_and_closes_maintenance`; `core/invariants.py` checks it after every simulated operation.
+- **Status.** Example-tested and simulated. The simulator found that the first version held only until someone clicked a button (see DECISIONS, S1).
 
 ### I14 — Suppression windows are bounded
 
@@ -193,21 +193,23 @@ Levels, delays, loop count and target identities are frozen when the incident op
 
 - **Mechanism.** `escalations/snapshot.py::build_snapshot` at open; the engine reads only `incident.escalation_snapshot`.
 - **Proof.** `escalations/tests/test_engine.py::test_policy_edit_does_not_change_open_incident` · `test_schedule_targets_resolve_to_whoever_is_on_call_when_the_level_fires`.
-- **Status.** Example-tested. Simulated in Phase 3 with policies rewritten mid-flight.
+- **Status.** Example-tested. Simulated with policies rewritten mid-flight.
 
 ---
 
-## Under investigation
+## Delivery
 
 ### C1 — No page is delivered for an incident that is already resolved
 
-If delivery is delayed (broker outage, retries), a page queued before resolution should not reach anyone after the incident is resolved.
+If delivery is delayed (broker outage, retries), a page queued before resolution never reaches anyone after the incident is resolved.
 
-- **Status.** Not yet enforced or tested. `deliver` currently checks only the row's status and the service mode. Phase 3 checks it and either fixes the behaviour or documents why not.
+- **Mechanism.** `notifications/actions.py::deliver` re-reads the incident under the row lock and marks the notification `cancelled` instead of sending when the incident is resolved.
+- **Proof.** `notifications/tests/test_delivery.py::test_a_page_queued_before_resolution_is_never_sent_after_it`; the simulator resolves incidents with undelivered backlogs (`resolve_backlog`) and fails on any send for a resolved incident.
+- **Status.** Enforced and simulated. This was a real defect (DECISIONS, S2).
 
 ---
 
 ## Not mechanically checked
 
 - **Email actually arrives.** Pulse can only prove that it handed a message to the email backend; inbox delivery is outside the system.
-- **Clock accuracy.** Due times are computed and compared with the clock of whichever app or worker process acts, so timing assumes NTP-synchronised hosts. A worker whose clock runs ahead escalates early by that skew; one that runs behind is caught up by any other worker's sweep. Skew can shift *when* a step happens, but the guarded update means it can't make a step happen twice (I4) or be skipped (I7). The simulator injects small skews in Phase 3.
+- **Clock accuracy.** Due times are computed and compared with the clock of whichever app or worker process acts, so timing assumes NTP-synchronised hosts. A worker whose clock runs ahead escalates early by that skew; one that runs behind is caught up by any other worker's sweep. Skew can shift *when* a step happens, but the guarded update means it can't make a step happen twice (I4) or be skipped (I7). The simulator injects small skews (`skewed_sweep`).

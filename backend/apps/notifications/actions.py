@@ -16,7 +16,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.catalog.models import Service
 from apps.core import dispatch
-from apps.incidents.models import EventType, Incident
+from apps.incidents.models import EventType, Incident, Status
 from apps.incidents.timeline import record
 
 from .channels import CHANNELS, PAGE_CHANNELS, ChannelError
@@ -98,6 +98,11 @@ def deliver(notification_id: int, *, now: datetime | None = None) -> Notificatio
             return notification
 
         incident = notification.incident
+        if incident.status == Status.RESOLVED:
+            # C1: the page was queued before the incident closed (broker outage, retries).
+            notification.status = Notification.Status.CANCELLED
+            notification.save(update_fields=["status", "updated_at"])
+            return notification
         if incident.service.mode == Service.Mode.DEBUG:
             # Mode switched to debug after the row was created: still never send.
             notification.status = Notification.Status.DRY_RUN

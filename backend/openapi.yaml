@@ -2290,12 +2290,14 @@ components:
       - sent
       - failed
       - dry_run
+      - cancelled
       type: string
       description: |-
         * `pending` - Pending
         * `sent` - Sent
         * `failed` - Failed
         * `dry_run` - Dry run
+        * `cancelled` - Cancelled
     OnCallEntry:
       type: object
       properties:

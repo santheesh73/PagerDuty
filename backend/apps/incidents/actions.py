@@ -183,7 +183,8 @@ def unacknowledge(incident_id: int, *, actor: User, now: datetime | None = None)
             status=Alert.Status.TRIGGERED
         )
         responders = (
-            [] if incident.is_maintenance
+            []
+            if incident.is_maintenance
             else engine.responders_at(incident, incident.escalation_level, now)
         )
         event = record(
