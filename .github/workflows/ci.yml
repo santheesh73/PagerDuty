@@ -155,7 +155,7 @@ jobs:
           done
       - name: Upload SBOMs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-images
           path: sbom/
@@ -196,7 +196,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/bin/trivy" fs --quiet --format cyclonedx --include-dev-deps \
             --output sbom-source.cdx.json .
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-source
           path: sbom-source.cdx.json
@@ -241,7 +241,7 @@ jobs:
           npx playwright test
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-traces
           path: e2e/test-results
@@ -262,7 +262,7 @@ jobs:
         run: ./scripts/doctor.sh
       - name: Upload stack logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doctor-logs
           path: doctor-logs.txt
@@ -281,7 +281,7 @@ jobs:
         run: DOCTOR_MODE=demo DOCTOR_LOGS=doctor-demo-logs.txt ./scripts/doctor.sh
       - name: Upload stack logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doctor-demo-logs
           path: doctor-demo-logs.txt
