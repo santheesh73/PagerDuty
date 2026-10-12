@@ -8,8 +8,8 @@ Inside the organisation, **teams** are the boundary, and it is enforced on every
 
 - Services, escalation policies, schedules, incidents, alerts, timelines, notifications and analytics are scoped to the teams you belong to. The user directory shows only your teammates, and the audit log shows only the teams you administer.
 - Each membership has a role per team: **viewer** (read), **responder** (act on incidents), **admin** (configure). The same person can hold different roles on different teams.
-- Someone outside a team gets **404, not 403**, for that team's objects, so ids can't be probed.
-- `backend/apps/core/tests/test_tenant_matrix.py` walks the real URL table. Every route and method is called as a member of another team and must return 403/404, change nothing, and leak nothing in list responses. A new endpoint fails that test until it is classified. More cases are in `test_tenant_isolation.py`, and the guarantee is I16 in [INVARIANTS.md](INVARIANTS.md).
+- Someone outside a team gets **404, not 403**, for that team's objects, so ids can't be probed. One known gap: list *filters* and *request fields* that name another team's id (`?team=`, `?escalation_policy=`, `team` in a POST body) answer 200 or 403 where an unknown id answers 422, so a signed-in user can still tell whether a team or policy id exists. They learn nothing else (audit finding F5, open, Low).
+- `backend/apps/core/tests/test_tenant_matrix.py` walks the real URL table. Every route and method is called as a member of another team and must return 404 (not 403), change nothing, and leak nothing in list responses. A new endpoint fails that test until it is classified. More cases are in `test_tenant_isolation.py`, and the guarantee is I16 in [INVARIANTS.md](INVARIANTS.md).
 
 ## What is global
 

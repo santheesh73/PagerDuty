@@ -94,9 +94,10 @@ class OverrideViewSet(AuditedMixin, viewsets.ModelViewSet):
     pagination_class = None
 
     def get_schedule(self) -> Schedule:
-        schedule = get_object_or_404(Schedule, pk=self.kwargs["schedule_pk"])
-        require_role(self.request.user, schedule.team_id, Role.VIEWER)
-        return schedule
+        # Looked up among the caller's own teams: another team's schedule is a 404, not a 403
+        # that would confirm its id exists (docs/TENANCY.md).
+        schedules = scope_to_teams(Schedule.objects.all(), self.request.user)
+        return get_object_or_404(schedules, pk=self.kwargs["schedule_pk"])
 
     def get_queryset(self) -> QuerySet[ScheduleOverride]:
         if getattr(self, "swagger_fake_view", False):  # OpenAPI generation

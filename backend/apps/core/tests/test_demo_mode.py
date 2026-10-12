@@ -40,6 +40,7 @@ def _fresh_cache() -> None:
 @pytest.fixture
 def demo(settings):  # type: ignore[no-untyped-def]
     settings.DEMO_MODE = True
+    settings.DEMO_ACCOUNT_GUARD = True
     settings.TASKS_INLINE = True
     settings.TICK_SECRET = SECRET
     return settings
@@ -236,6 +237,7 @@ def test_other_accounts_and_other_modes_are_unaffected(settings) -> None:
     assert client.post("/api/v1/me/mfa/setup/").status_code == 200, "DEMO_MODE off: allowed"
 
     settings.DEMO_MODE = True
+    settings.DEMO_ACCOUNT_GUARD = True
     client = Client()
     client.force_login(UserFactory(email="someone@example.com"))
     assert client.post("/api/v1/me/mfa/setup/").status_code == 200, "a real account: allowed"
@@ -345,3 +347,52 @@ def test_without_an_spa_dir_unknown_paths_are_plain_404s(settings) -> None:
     response = Client().get("/incidents")
     assert response.status_code == 404
     assert "text/html" in response["Content-Type"]
+
+
+# --- visitors share a login: they must not see or end each other's sessions -------------------
+
+
+def test_demo_visitors_do_not_see_each_others_address_or_browser(demo) -> None:
+    from apps.security.models import SessionRecord
+
+    user = UserFactory(email="admin@demo.local")
+    SessionRecord.objects.create(
+        session_key="other", user=user, ip="198.51.100.77", user_agent="VisitorOneBrowser/1.0"
+    )
+    client = Client()
+    client.force_login(user)
+    rows = client.get("/api/v1/me/sessions/").json()
+    assert rows, "the list itself still works"
+    assert all(r["ip"] is None and r["user_agent"] == "" for r in rows)
+
+
+def test_demo_visitors_cannot_sign_each_other_out(demo) -> None:
+    from apps.security.models import SessionRecord
+
+    user = UserFactory(email="admin@demo.local")
+    other = SessionRecord.objects.create(session_key="other", user=user, ip="198.51.100.77")
+    client = Client()
+    client.force_login(user)
+    assert client.post("/api/v1/me/sessions/revoke-others/").status_code == 403
+    assert client.delete(f"/api/v1/me/sessions/{other.pk}/").status_code == 403
+    assert SessionRecord.objects.filter(pk=other.pk).exists()
+
+
+def test_sessions_show_addresses_outside_the_demo(settings) -> None:
+    from apps.security.models import SessionRecord
+
+    assert settings.DEMO_ACCOUNT_GUARD is False
+    user = UserFactory(email="admin@demo.local")
+    SessionRecord.objects.create(session_key="s", user=user, ip="198.51.100.77")
+    client = Client()
+    client.force_login(user)
+    assert any(r["ip"] == "198.51.100.77" for r in client.get("/api/v1/me/sessions/").json())
+
+
+def test_the_guard_can_be_enabled_without_demo_mode(settings) -> None:
+    # deploy/render-full.yaml: a full stack that seeds the shared demo logins.
+    settings.DEMO_ACCOUNT_GUARD = True
+    assert settings.DEMO_MODE is False
+    client = Client()
+    client.force_login(UserFactory(email="admin@demo.local"))
+    assert client.post("/api/v1/me/mfa/setup/").status_code == 403

@@ -176,6 +176,9 @@ REQUIRE_MFA_FOR_ADMINS = env_bool("REQUIRE_MFA_FOR_ADMINS", False)
 # window and the account refuses passwords until it ends (whoever is guessing, from wherever).
 LOGIN_LOCKOUT_FAILURES = int(os.environ.get("LOGIN_LOCKOUT_FAILURES", "10"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))
+# Wrong two-factor codes per account before the code step locks, across password steps.
+MFA_LOCKOUT_FAILURES = int(os.environ.get("MFA_LOCKOUT_FAILURES", "10"))
+MFA_LOCKOUT_SECONDS = int(os.environ.get("MFA_LOCKOUT_SECONDS", "900"))
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False  # the SPA reads it to echo X-CSRFToken
@@ -214,6 +217,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Incident orchestration: Events ingest, incidents, escalation, on-call.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # An exact release, never @latest: this script runs on the same origin as the session cookie.
+    "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14",
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": r"/api/v1",
     "POSTPROCESSING_HOOKS": [
@@ -432,7 +437,13 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 # called by an external scheduler. Postgres already holds every timer and every pending page, so
 # nothing is lost between ticks, only delayed. See docs/DEPLOY.md.
 DEMO_MODE = env_bool("DEMO_MODE")
+# Swagger UI at /api/docs/. It loads its script from a CDN onto the origin that holds the session
+# cookie, so production serves it only when asked (API_DOCS=1); the schema stays at /api/schema/.
+API_DOCS = env_bool("API_DOCS", True)
 TASKS_INLINE = DEMO_MODE
+# Shared @demo.local logins can't change their credentials or see other visitors' addresses
+# (apps/core/demo.py). On with DEMO_MODE; set it alone for a full stack that seeds the demo logins.
+DEMO_ACCOUNT_GUARD = env_bool("DEMO_ACCOUNT_GUARD", DEMO_MODE)
 # The tick endpoint answers 404 unless DEMO_MODE is on and this is set.
 TICK_SECRET = os.environ.get("TICK_SECRET", "")
 # A public demo's logins are shared, so visitors can change anything they like: reseed it from

@@ -26,6 +26,18 @@ envVarGroups:
       # stays 0 (see docs/DECISIONS.md, "HSTS is opt-in"). No includeSubdomains, no preload.
       - key: SECURE_HSTS_SECONDS
         value: "31536000"
+      # Proxies appending to X-Forwarded-For before Django: Render's edge, nginx (pulse-web),
+      # then Render's edge again for pulse-api. Derived from this topology, not yet measured:
+      # confirm with the forged-header login check in docs/DEPLOY.md after the first deploy.
+      # Production settings refuse to start without it.
+      - key: NUM_PROXIES
+        value: "3"
+      # The seeded demo logins are shared and printed on the sign-in page: they can't change
+      # their credentials or sessions, and admins needn't enrol MFA (nobody could, safely).
+      - key: DEMO_ACCOUNT_GUARD
+        value: "1"
+      - key: REQUIRE_MFA_FOR_ADMINS
+        value: "0"
       - key: GUNICORN_WORKERS
         value: "2"
       - key: CELERY_CONCURRENCY

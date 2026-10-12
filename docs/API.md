@@ -1,6 +1,6 @@
 # API conventions
 
-The machine-readable contract is the OpenAPI 3 schema: [`backend/openapi.yaml`](../backend/openapi.yaml), served at `/api/schema/` with Swagger UI at `/api/docs/`. CI regenerates it and fails if the committed copy differs. This page covers what a schema can't say: versioning, errors, pagination, retries and limits. Each rule below names the test that pins it.
+The machine-readable contract is the OpenAPI 3 schema: [`backend/openapi.yaml`](../backend/openapi.yaml), served at `/api/schema/` with Swagger UI at `/api/docs/` (on in development and the demo; off in production unless `API_DOCS=1`, because it loads its script from a CDN onto the session cookie's origin). CI regenerates it and fails if the committed copy differs. This page covers what a schema can't say: versioning, errors, pagination, retries and limits. Each rule below names the test that pins it.
 
 ## Versioning
 

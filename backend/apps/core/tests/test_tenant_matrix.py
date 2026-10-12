@@ -265,7 +265,8 @@ def test_another_teams_data_is_unreachable(world, route: Route) -> None:
         path = fill(route.template, world["ids"])
         for method in route.methods:
             response = getattr(client, method)(path, data={}, format="json")
-            assert response.status_code in (403, 404), (
+            # 404, never 403: a 403 would tell an outsider that the id exists (docs/TENANCY.md).
+            assert response.status_code == 404, (
                 f"LEAK: {method.upper()} {path} answered {response.status_code} for another "
                 f"team's object: {response.content[:200]!r}"
             )

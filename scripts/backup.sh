@@ -56,8 +56,10 @@ fi
 # Rotate only after a verified new dump exists, so a failing job never deletes the last good one.
 prune() { # dir keep
   local dir="$1" keep="$2" f
+  # An empty directory makes `ls` exit 2, which pipefail would turn into a failed backup (on
+  # every day but the weekly one, `weekly/` is empty): nothing to prune is not an error.
   # shellcheck disable=SC2012
-  ls -1t "$dir"/pulse-*.dump 2>/dev/null | tail -n +"$((keep + 1))" | while read -r f; do
+  { ls -1t "$dir"/pulse-*.dump 2>/dev/null || true; } | tail -n +"$((keep + 1))" | while read -r f; do
     rm -f "$f" "$f.sha256"
   done
 }
