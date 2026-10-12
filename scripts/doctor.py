@@ -285,8 +285,10 @@ class Doctor:
         s = Session(self.a.base)
         codes = []
         for i in range(13):
+            # A different account each time: with one email the per-account lockout also answers
+            # 429 after ten failures, so a throttle that trusts the forged header would pass.
             status, _ = s.login(
-                "nobody@example.test", "x", headers={"X-Forwarded-For": f"10.9.8.{i}, 198.51.100.1"}
+                f"nobody{i}@example.test", "x", headers={"X-Forwarded-For": f"10.9.8.{i}, 198.51.100.1"}
             )
             codes.append(status)
         check(

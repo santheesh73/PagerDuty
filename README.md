@@ -33,7 +33,7 @@
 - **Idempotent paging.** The ETA task and the safety-net sweeper are *designed* to race. A guarded `SELECT … FOR UPDATE SKIP LOCKED` lets exactly one win, and unique notification keys mean a retry can never page twice.
 - **DST-correct rotations.** A 09:00 handoff stays at 09:00 local through spring-forward and fall-back (including a handoff inside the non-existent 02:30 hour). The resolver is pure functions with no database, tested exhaustively.
 - **Policy snapshots.** Editing an escalation policy never rewires an incident already in flight, but schedule targets still follow the live rotation.
-- **A frozen-time test suite.** <!-- n:backend_tests -->684<!-- /n --> backend tests (<!-- n:coverage -->95<!-- /n -->% statement and branch coverage) and <!-- n:frontend_tests -->42<!-- /n --> frontend tests drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
+- **A frozen-time test suite.** <!-- n:backend_tests -->694<!-- /n --> backend tests (<!-- n:coverage -->95<!-- /n -->% statement and branch coverage) and <!-- n:frontend_tests -->42<!-- /n --> frontend tests drive the real timing model with explicit `now` and `time-machine`, plus threaded race tests. Celery never runs eagerly in engine tests.
 
 ## Quick start
 
@@ -154,7 +154,7 @@ make e2e             # Playwright: the alert→resolve journey, plus an axe audi
 
 - **Property tests** (`schedules/tests/test_oncall_properties.py`): one responder at any instant, rendered shifts partition the window and agree with `on_call`, handoffs land on local time across DST in six zones, rotation fairness, determinism. They found a real fall-back bug.
 - **Simulator** (`manage.py simulate --seed N`): real code, real Postgres, a virtual clock, injected faults, and `core/invariants.py` after every operation. The fixed seed runs in CI; any failure prints the seed and the command that reproduces it.
-- **Mutation testing** (`scripts/mutate.py`): <!-- n:mutations -->84<!-- /n --> deliberate breakages of critical lines, among them team scoping on every list, `SKIP LOCKED`, the dedup index, signature and secret checks, the MFA gate and the counters' expiry. A test has to catch each one. The one survivor, `skip-locked`, is documented as behaviour-equivalent.
+- **Mutation testing** (`scripts/mutate.py`): <!-- n:mutations -->94<!-- /n --> deliberate breakages of critical lines, among them team scoping on every list, `SKIP LOCKED`, the dedup index, signature and secret checks, the MFA gate and the counters' expiry. A test has to catch each one. The one survivor, `skip-locked`, is documented as behaviour-equivalent.
 
 - **On-call resolver** (no DB): handoff instants, DST forward/back in New York and London, weekly/custom rotations, override precedence, layer priority, empty layers, shift rendering.
 - **Escalation engine**: level advance, loops, exhaustion, ack stops it, ETA + sweeper double-fire pages once (plus a 4-thread race), no-responder skip, policy edits don't touch open incidents, unack restarts the timer, low urgency never escalates, debug → dry run, sweeper recovery after a lost ETA message, broker outage doesn't fail ingest.
