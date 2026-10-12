@@ -13,7 +13,25 @@ file="${1:?usage: restore.sh <dump> <target-database-url>}"
 target="${2:?usage: restore.sh <dump> <target-database-url>}"
 [ -f "$file" ] || { echo "restore: no such file: $file" >&2; exit 1; }
 
-if [ -n "${DATABASE_URL:-}" ] && [ "$target" = "$DATABASE_URL" ] && [ "${CONFIRM_OVERWRITE:-}" != "yes" ]; then
+# Which database a URL points at, ignoring how it is spelled: credentials, query string, the host
+# aliases for this machine and the default port. (Comparing the strings let `localhost` against
+# `127.0.0.1` restore over the live database without the confirmation.)
+database_of() {
+  local rest="${1#*://}" hostport db host port
+  rest="${rest#*@}"; rest="${rest%%\?*}"
+  hostport="${rest%%/*}"; db="${rest#*/}"
+  case "$hostport" in
+    "["*"]:"*) host="${hostport%%]*}]"; port="${hostport##*:}" ;;
+    "["*"]") host="$hostport"; port=5432 ;;
+    *:*) host="${hostport%%:*}"; port="${hostport##*:}" ;;
+    *) host="$hostport"; port=5432 ;;
+  esac
+  case "$host" in localhost | 127.0.0.1 | 0.0.0.0 | "[::1]" | "") host=localhost ;; esac
+  echo "$host:$port/$db"
+}
+
+if [ -n "${DATABASE_URL:-}" ] && [ "$(database_of "$target")" = "$(database_of "$DATABASE_URL")" ] \
+  && [ "${CONFIRM_OVERWRITE:-}" != "yes" ]; then
   echo "restore: target is the live DATABASE_URL; set CONFIRM_OVERWRITE=yes to overwrite it" >&2
   exit 2
 fi

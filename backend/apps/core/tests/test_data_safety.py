@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -146,6 +147,27 @@ def test_celery_is_configured_to_survive_a_dead_or_wedged_worker() -> None:
 # --- concurrent migrate ----------------------------------------------------------------------
 
 
+def drop_database(admin, name: str, *, attempts: int = 20) -> None:  # type: ignore[no-untyped-def]
+    """Drop a scratch database, tolerating a role that cannot terminate other backends.
+
+    `WITH (FORCE)` terminates every connection, and a non-superuser may not signal a backend it
+    does not own (an autovacuum worker appears on a freshly migrated database): the cleanup used
+    to fail with InsufficientPrivilege and fail an otherwise passing test. CI runs as a superuser,
+    so only a developer's machine ever saw it. Fall back to a plain DROP, retrying while the
+    last connections close."""
+    for _ in range(attempts):
+        try:
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+            return
+        except psycopg.errors.InsufficientPrivilege:
+            try:
+                admin.execute(f'DROP DATABASE IF EXISTS "{name}"')
+                return
+            except psycopg.errors.ObjectInUse:
+                time.sleep(0.5)
+    raise AssertionError(f"could not drop scratch database {name}")
+
+
 def _admin_url(name: str) -> str:
     base = settings.DATABASES["default"]
     return (
@@ -191,4 +213,27 @@ def test_concurrent_migrate_safely_on_a_fresh_database_all_succeed() -> None:
         assert check.returncode == 0, check.stdout + check.stderr
     finally:
         with psycopg.connect(_admin_url("postgres"), autocommit=True) as admin:
-            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+            drop_database(admin, name)
+
+
+class _NonSuperuser:
+    """An admin connection that refuses FORCE the way a role without pg_signal_backend does."""
+
+    def __init__(self, in_use_first: int = 0) -> None:
+        self.statements: list[str] = []
+        self.in_use = in_use_first
+
+    def execute(self, sql: str) -> None:
+        self.statements.append(sql)
+        if "FORCE" in sql:
+            raise psycopg.errors.InsufficientPrivilege("permission denied to terminate process")
+        if self.in_use:
+            self.in_use -= 1
+            raise psycopg.errors.ObjectInUse("database is being accessed by other users")
+
+
+def test_dropping_a_scratch_database_tolerates_a_role_that_cannot_force_it() -> None:
+    admin = _NonSuperuser(in_use_first=2)
+    drop_database(admin, "pulse_race_x")
+    assert admin.statements[-1] == 'DROP DATABASE IF EXISTS "pulse_race_x"'
+    assert sum("FORCE" in s for s in admin.statements) == 3, "tried FORCE each round"

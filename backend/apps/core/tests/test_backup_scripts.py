@@ -259,3 +259,39 @@ def test_a_weekly_copy_that_fails_halfway_leaves_nothing_that_looks_like_a_backu
     assert result.returncode != 0
     assert list((out / "weekly").iterdir()) == [], "no file, partial or final, may be left"
     assert (out / "daily" / "pulse-20260105T000000Z.dump").stat().st_size > 10
+
+
+def _respelled(url: str) -> list[str]:
+    """The same database written differently: another host alias, no explicit port, other
+    credentials, a query string."""
+    scheme, rest = url.split("://", 1)
+    _credentials, hostpart = rest.split("@", 1)
+    host, _, tail = hostpart.partition(":")
+    port_and_db = tail  # "5432/test_pulse"
+    alias = "localhost" if host == "127.0.0.1" else "127.0.0.1"
+    db = port_and_db.split("/", 1)[1]
+    return [
+        f"{scheme}://pulse:pulse@{alias}:{port_and_db}",
+        f"{scheme}://pulse:pulse@{host}/{db}",
+        f"{scheme}://someone:else@{host}:{port_and_db}",
+        f"{scheme}://pulse:pulse@{host}:{port_and_db}?sslmode=prefer",
+    ]
+
+
+def test_restore_recognises_the_live_database_under_any_spelling(tmp_path: Path) -> None:
+    """The guard compared the two URLs as strings, so `localhost` against `127.0.0.1` restored
+    over the live database with no confirmation (final audit)."""
+    assert backup(tmp_path, "20260402T000000Z").returncode == 0
+    dump = tmp_path / "daily" / "pulse-20260402T000000Z.dump"
+    for target in _respelled(db_url()):
+        result = run(RESTORE, str(dump), target, env={"DATABASE_URL": db_url()})
+        assert result.returncode == 2, (target, result.stderr)
+        assert "CONFIRM_OVERWRITE" in result.stderr
+
+
+def test_restore_still_allows_a_different_database_on_the_same_server(tmp_path: Path) -> None:
+    assert backup(tmp_path, "20260403T000000Z").returncode == 0
+    dump = tmp_path / "daily" / "pulse-20260403T000000Z.dump"
+    other = db_url().rsplit("/", 1)[0] + "/pulse_not_the_live_one"
+    result = run(RESTORE, str(dump), other, env={"DATABASE_URL": db_url()})
+    assert result.returncode != 2, "not the live database: it may be refused for another reason"

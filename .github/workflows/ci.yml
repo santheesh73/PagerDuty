@@ -317,7 +317,7 @@ jobs:
       - name: Shell scripts pass shellcheck
         run: |
           shellcheck scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
-            scripts/install-trivy.sh scripts/record_demo.sh
+            scripts/install-trivy.sh scripts/record_demo.sh scripts/backup.sh scripts/restore.sh
 
   backup-drill:
     name: Backup drill (backup · restore · compare · boot API)
