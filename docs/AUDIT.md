@@ -18,7 +18,7 @@ What the audit did find was real, and some of it was embarrassing:
 - a notification that could stay `pending` forever;
 - thirteen security-relevant lines that no test would have noticed being removed.
 
-All of these are fixed (see [findings](#findings)). Eleven Medium and several Low findings remain open, listed under [residual risk](#residual-risks). **Pulse is a well-tested, honestly documented system that is ready to run a small deployment. It has not been run in production**, and the public demo is not yet deployed (it needs a database URL only the owner can supply).
+All of these are fixed (see [findings](#findings)). A second pass fixed most of what the first left open; what remains is listed under [residual risk](#residual-risks). **Pulse is a well-tested, honestly documented system that is ready to run a small deployment. It has not been run in production**, and the public demo is not yet deployed (it needs a database URL only the owner can supply).
 
 ### Grades
 
@@ -28,7 +28,7 @@ All of these are fixed (see [findings](#findings)). Eleven Medium and several Lo
 | Security | **B** | No authorisation, injection, SSRF or secret finding of consequence; strong tenancy, CSRF, MFA, signed-link and SSRF guards. Lost points for the throttle bypass and `NUM_PROXIES` default (fixed), the demo's shared-login leaks (fixed), and open Low items such as the reset-timing oracle and a truncatable audit log. |
 | Tests | **B** | 694 backend tests at 95% statement and branch coverage, a 94-mutation harness, property tests, a fault-injection simulator. The mutation work found 13 unpinned guards (now pinned). Frontend coverage is 31% with no threshold, and the mutation harness does not run in CI. |
 | Architecture | **B** | Postgres as the source of truth, DB-as-timer and claim/send/settle delivery are sound and survived Redis loss, Beat loss and connection loss. The lock-order deadlock and the missing incident-list index show where it was not yet exercised. |
-| Operability | **C** | Drills passed (Beat, SMTP, Redis, Postgres, disk full), alerts fire, backups restore. But detection is slow (a dead Beat is flagged in about 4 minutes), a lost Redis plus a dead Beat blinds the Beat alert, the email retry budget is only about 17 s, and failed pages are hard for an operator to see. |
+| Operability | **C** | Drills passed (Beat, SMTP, Redis, Postgres, disk full), alerts fire, backups restore. At audit time detection was slow (a dead Beat in about 4 minutes), a lost Redis plus a dead Beat blinded the Beat alert, the email retry budget was about 17 s, and failed pages were hard for an operator to see; the second pass fixed all four, but the grade is the one given at the time and was not re-assessed. |
 | Docs honesty | **B** | The claims were mostly true (102 of 122 ledger rows). The false ones were stale numbers and one overclaim ("at most once"), all corrected. |
 | Portfolio polish | **B** | Clear README with measured numbers, a recorded demo, runbooks. Not deployed, so no live link. |
 
@@ -142,37 +142,47 @@ Severity: **Critical** a page lost or doubled, cross-team exposure, auth bypass,
 | F-14 | Med | Thirteen security-relevant lines could be removed without any test failing: idempotency while a request is in flight and across routing keys, the `UNIQUE` page key, the claim's row lock, the integration-key prefix, HSTS, every session-cookie flag, count-only scoping of the incidents-per-day chart and the session list | tests and mutations added (below) |
 | F-15 | Low | Docs: stale drill and migration figures, missing `cancelled` status, I5's "two minutes" (it is 90 s), decision 18's HSTS default (documented 0, actually one year), the "23 mutations" count, "at most once" | corrected |
 
+### Fixed in a second pass (after the audit was written)
+
+The first pass fixed what was small and certain. A second pass, requested straight afterwards, closed most of what remained. Each has a test that fails on the old code (the retry, alert and index changes also have their own mutations), and the full harness was re-run: 109 mutations, 108 caught, the one documented equivalent. **The fixes were verified by tests, `promtool test rules` and the mutation harness; the operational drills and the load run were not repeated, and no reviewer re-audited them.**
+
+| # | Was | Now |
+|---|---|---|
+| M-10 | An alert arriving as a maintenance window ends could open a maintenance incident on an active service and never page | The mode is read inside the transaction under a shared row lock, so the alert sees the result of a mode change in progress |
+| M-11 | Demo-mode database-cache counters lost increments (16 hits counted as 2 to 5) | An advisory lock per key makes each count atomic |
+| M-12 | Email retry budget about 17 s | 30, 60, 120, 240 s (about 7.5 minutes); a failed attempt records `next_attempt_at`, and the claim, the Celery task and both sweepers wait it out |
+| M-13 | A dead Beat flagged in about 4 minutes | `for` is 30 s: about 3.5 minutes; the docs say so |
+| M-14 | A lost Redis plus a dead Beat left `PulseBeatStalled` unable to fire | `PulseBeatNeverSeen` fires after 3 minutes (was 10); promtool tests cover the case |
+| M-15 | A failed page's reason was in no API response | `GET /api/v1/incidents/{id}/notifications/` (responders and admins): channel, status, attempts, `last_error`; no destination |
+| L-1 | Another team's id answered differently from an unknown one in filters and body fields | Both are validated against the caller's own teams only (`core/scoping.py`) |
+| L-2 | Password-reset timing differed for known and unknown emails | Both do the same audit write |
+| L-4 | A stored 429 or 409 was replayed for 24 hours; a retry racing the first attempt could run twice; the query string was ignored | Only final answers are stored; the lock is re-checked after it is taken; the query string is part of the request |
+| L-5 | A monitor could name the reserved `__maintenance__` dedup key | Refused with 422 |
+| L-6 | A user removed from a team was still paged by its rotations | Only current team members are paged |
+| L-7 | A CSRF failure on login was an HTML page | The JSON error envelope |
+| L-8 | `PulseNotificationFailures` false-fired after a retention purge | It watches `pulse_notifications_failed_recent`, a gauge of the last 15 minutes |
+| L-9 | `restore.sh` compared URLs as strings | It compares host (with aliases for this machine), port and database name |
+| L-10 | The migrate test's cleanup failed for a non-superuser role | It falls back to a plain `DROP` and retries |
+| I-1 | No index for the incident list's order | `incident_list_order_idx`, built concurrently |
+| I-2 | The mutation harness was not run in CI | `.github/workflows/mutation.yml`, weekly and on demand (about 10 minutes). Frontend coverage is still unmeasured |
+| I-3 | `SKIP LOCKED` was listed as part of the no-double-page mechanism | I4, decision 3 and the README now say it is a latency choice |
+| I-5 | nginx announced its version and lacked one Permissions-Policy entry | `server_tokens off` and `interest-cohort=()` |
+| Deploy | A service whose `DATABASE_URL` was pasted under another name failed with an unexplained error | The startup error names the near-miss variable (never its value) |
+
 ### Open (not fixed)
 
 | # | Sev | Finding | Why it is open |
 |---|---|---|---|
 | M-9 | Med | **At-least-once, not at-most-once.** A worker dying between the provider accepting a message and the row being settled, a relay slower than `EMAIL_TIMEOUT`, or a send longer than `CLAIM_TTL` can repeat a page, up to `MAX_ATTEMPTS` (5) times; the row can then read `failed` for a page that arrived | Inherent to preferring repeats over loss. Documented in I4 and pinned by a test. A fix would treat a timeout after `DATA` as "possibly sent" |
-| M-10 | Med | An alert arriving exactly as a maintenance window ends can be absorbed into a new maintenance incident on an active service: it never pages and nothing closes it (I13, I5) | Reproduced by the review track with a controlled interleaving; the fix (re-read the mode after taking the lock) needs its own design and test |
-| M-11 | Med | Demo-mode database-cache counters lose increments under concurrency (16 hits counted as 2 to 5; 13 of 30 parallel tick calls allowed against a limit of 12) | Demo only; the shipped demo is single-purpose and the tick is also protected by a secret |
-| M-12 | Med | Email retry budget is about 17 s (five quick attempts); an SMTP outage of 20 s or more permanently fails the email page. The in-app page and escalation are the fallback | Needs a time-based retry design |
-| M-13 | Med | Beat death is flagged in about 4 minutes (`> 180` for `1m`), and the docs say 3. Only an empty-level escalation depends on the Beat sweeper; the ETA task covers the normal case | Detection speed is a trade-off with false alarms |
-| M-14 | Med | A lost Redis plus a dead Beat leaves the heartbeat series absent, so `PulseBeatStalled` cannot fire; only `PulseBeatNeverSeen` does, after 10 minutes (proved with a promtool test) | Persist the heartbeat in Postgres |
-| M-15 | Med | Failed pages are hard to see: the API returns only a user's own in-app rows and `last_error` is in no serializer; an operator needs the admin or a shell | Needs an API design |
-| L-1 | Low | Filters and request fields naming another team's id (`?team=`, `?escalation_policy=`, `team` in a POST) answer differently for existing and unknown ids | Documented in TENANCY.md |
-| L-2 | Low | Password-reset timing differs for known and unknown emails (median 10.5 ms vs 6.5 ms over 200 pairs) | Rate limited (10/h per address, 3/h per email) |
-| L-3 | Low | The audit log trigger blocks `UPDATE` and `DELETE` but not `TRUNCATE`, and the app role owns the table | Needs a non-owner role |
-| L-4 | Low | Idempotency replays stored 4xx for 24 h including 429; a write can run twice in a two-round-trip race; the query string is not in the key | Documented residual |
-| L-5 | Low | The reserved `__maintenance__` dedup key is accepted from monitors | |
-| L-6 | Low | A user removed from a team keeps being paged by that team's rotations (action links do re-check membership) | |
-| L-7 | Low | A CSRF failure on login returns Django's HTML 403, not the error envelope | |
-| L-8 | Low | `PulseNotificationFailures` can false-fire after a retention purge (the metric is a row count) | |
-| L-9 | Low | `restore.sh` refuses to overwrite the live database only when the two URLs are spelled identically (`localhost` vs `127.0.0.1` passes) | |
-| L-10 | Low | The concurrent-migrate test's cleanup can fail for a non-superuser role (`DROP DATABASE … WITH (FORCE)` cannot signal an autovacuum backend). CI uses a superuser. This is the cause of the once-seen local failure | |
-| L-11 | Low | The `ip` shown in the session list of a real deployment is whatever `NUM_PROXIES` yields; wrong values mislead | |
-| I-1 | Info | No index supports the incident-list order (128 ms at 300k rows for a team member); retention scans sequentially; `/users/` and `/overrides/` are unpaginated; `set_mode` holds the service row while resolving maintenance alerts (2.4 s at 172,800 alerts) | |
-| I-2 | Info | `scripts/mutate.py` is not run in CI (about 10 minutes); the frontend has 31% line coverage and no threshold; two frontend routes (`RequireAuth`, `SecurityPage`) have none | |
-| I-3 | Info | `SKIP LOCKED` in the escalation claim is not part of the no-double-page mechanism (the mutation harness's one documented survivor): without it a held row stalls a sweep for up to the lock timeout instead of deferring to the next sweep. INVARIANTS I4 and decision 3 still list it among the mechanisms | |
+| L-3 | Low | The audit log trigger blocks `UPDATE` and `DELETE` but not `TRUNCATE`, and the app role owns the table | A `TRUNCATE` trigger would break Django's own test flush, which truncates every table; a fix needs a separate non-owner database role for the application |
+| L-11 | Low | The `ip` in the session list is whatever `NUM_PROXIES` yields; a wrong value misleads | Operator configuration; `docs/DEPLOY.md` has the check |
+| I-2 | Info | The frontend has 31% line coverage and no threshold; `RequireAuth` and `SecurityPage` have none | A coverage gate needs a new dev dependency |
 | I-4 | Info | Action links are bearer tokens that bypass the admin MFA-enrolment gate, and webhook payloads carry them: anyone who can read the target channel can act as the paged person | Documented design |
-| I-5 | Info | nginx forwards a client-supplied `X-Forwarded-Proto` when it is the edge, does not set `server_tokens off`, and lacks `interest-cohort` in `Permissions-Policy` | |
+| I-5 | Info | nginx forwards a client-supplied `X-Forwarded-Proto` when it is the edge | Deliberate: Render and similar platforms terminate TLS upstream and depend on it |
 
 ## Mutation testing
 
-The harness (`scripts/mutate.py`) applies one small, realistic breakage to a critical line and requires the named tests to fail. It started this audit at 74 mutations (73 caught, one documented equivalent survivor). The audit added its own mutations; every one that survived the whole suite is now pinned. **Final full run of `python3 scripts/mutate.py` on this branch: 94 mutations, 93 caught, 1 survived (`skip-locked`, the documented equivalent), 0 invalid.** Two earlier full runs aborted because two of my own edits (`no_key=True`, `DEMO_ACCOUNT_GUARD`) had changed the lines three mutations match on; the harness refuses a pattern that no longer matches exactly once, which is how I found them.
+The harness (`scripts/mutate.py`) applies one small, realistic breakage to a critical line and requires the named tests to fail. It started this audit at 74 mutations (73 caught, one documented equivalent survivor) and has 109 on this branch (108 caught). The audit added its own mutations; every one that survived the whole suite is now pinned. **Final full run of `python3 scripts/mutate.py` on this branch: 109 mutations, 108 caught, 1 survived (`skip-locked`, the documented equivalent), 0 invalid.** Two earlier full runs aborted because two of my own edits (`no_key=True`, `DEMO_ACCOUNT_GUARD`) had changed the lines three mutations match on; the harness refuses a pattern that no longer matches exactly once, which is how I found them.
 
 | Category | Mutation (file) | Breakage | Result | Caught by |
 |---|---|---|---|---|
@@ -241,11 +251,11 @@ Mutations the audit tried that the harness did not already have: 27 by the mutat
 
 What a reader deciding whether to run this should still weigh:
 
-1. **A page can arrive more than once** (M-9) and **an email outage of 20 seconds can lose the email page** (M-12). Both are bounded and the in-app page and escalation remain.
-2. **An alert at the instant a maintenance window ends can be swallowed** (M-10).
-3. **Detection is slower than the docs imply** and has a blind spot when Redis and Beat fail together (M-13, M-14).
-4. **The full-stack Render blueprint's `NUM_PROXIES` is unmeasured.** A wrong value is silent.
-5. **The demo's shared logins** are public by design; the guards limit what a visitor can do to others, not what they can do to the demo's data (it is reseeded daily).
+1. **A page can arrive more than once** (M-9), bounded by five attempts. An email outage now has to outlast about 7.5 minutes to fail the email page (M-12 fixed); the in-app page and escalation remain either way.
+2. **The second pass was not re-audited.** The maintenance-expiry race, the retry timing, the alert changes and the removed-member filter are covered by tests, promtool unit tests and mutations, but the drills (Beat kill, SMTP down, Redis wipe) and the load run were not repeated against them.
+3. **The full-stack Render blueprint's `NUM_PROXIES` is unmeasured.** A wrong value is silent.
+4. **The demo's shared logins** are public by design; the guards limit what a visitor can do to others, not what they can do to the demo's data (it is reseeded daily).
+5. **The application role owns the audit table**, so a database-level `TRUNCATE` is possible (L-3).
 6. **No third party has reviewed this**, and the application has never carried real traffic.
 
 ## How to reproduce

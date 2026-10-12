@@ -10,7 +10,16 @@ from .base import env_bool
 # X-Forwarded-For header, so a client picks the address its sign-in limits and audit log see.
 for required in ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL", "NUM_PROXIES"):
     if not os.environ.get(required):
-        raise ImproperlyConfigured(f"{required} must be set in production")
+        message = f"{required} must be set in production"
+        if required == "DATABASE_URL":
+            # The platform's own name for it is easy to paste under the wrong key (on Render the
+            # dashboard calls it "Internal Database URL"): say which near-miss was found.
+            near = sorted(k for k in os.environ if "DATABASE_URL" in k.upper() and k != required)
+            if near:
+                message += (
+                    f" (found {', '.join(near)}: the variable must be named exactly {required})"
+                )
+        raise ImproperlyConfigured(message)
 
 DEBUG = False
 SECRET_KEY = os.environ["SECRET_KEY"]

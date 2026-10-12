@@ -95,6 +95,9 @@ class Incident(TimeStampedModel):
                 fields=["status", "next_escalation_at"], name="incident_due_escalation_idx"
             ),
             models.Index(fields=["service", "triggered_at"], name="incident_service_time_idx"),
+            # The incident list's order (newest first, id breaks ties) without a sort: the SPA polls
+            # it, and 300k rows took 128 ms per request in the final audit.
+            models.Index(fields=["-triggered_at", "-id"], name="incident_list_order_idx"),
         ]
 
     def __str__(self) -> str:

@@ -210,3 +210,14 @@ def test_a_body_naming_another_teams_object_answers_like_an_unknown_id(outsider)
     missing = post(99999999, 99999999)
     assert foreign.status_code == missing.status_code == 422
     assert set(foreign.json()["error"]["details"]) == set(missing.json()["error"]["details"])
+
+
+# --- the SPA's nginx does not announce its version and sends the same Permissions-Policy ------
+
+
+def test_the_spa_nginx_hides_its_version_and_opts_out_of_cohort_tracking() -> None:
+    from pathlib import Path
+
+    docker = Path(__file__).resolve().parents[4] / "frontend" / "docker"
+    assert "server_tokens off;" in (docker / "nginx.conf").read_text()
+    assert "interest-cohort=()" in (docker / "15-pulse-headers.envsh").read_text()
