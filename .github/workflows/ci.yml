@@ -294,6 +294,8 @@ jobs:
       - name: Alert rules and Prometheus config are valid
         run: |
           docker run --rm --entrypoint promtool -v "$PWD/ops:/ops:ro" prom/prometheus:v3.5.0 check rules /ops/alerts.yml
+          # Every alert fires on synthetic series and resolves (ops/alerts_test.yml).
+          docker run --rm --entrypoint promtool -v "$PWD/ops:/ops:ro" prom/prometheus:v3.5.0 test rules /ops/alerts_test.yml
           # The scrape config references a secret file that only exists inside the stack.
           docker run --rm --entrypoint promtool -v "$PWD/ops:/etc/prometheus:ro" prom/prometheus:v3.5.0 \
             check config --syntax-only /etc/prometheus/prometheus.yml
@@ -315,7 +317,7 @@ jobs:
       - name: Shell scripts pass shellcheck
         run: |
           shellcheck scripts/deploy.sh scripts/smoke.sh scripts/doctor.sh \
-            scripts/install-trivy.sh scripts/record_demo.sh
+            scripts/install-trivy.sh scripts/record_demo.sh scripts/backup.sh scripts/restore.sh
 
   backup-drill:
     name: Backup drill (backup · restore · compare · boot API)

@@ -57,3 +57,15 @@ def test_swagger_ui_is_off_in_production_unless_asked_for() -> None:
     # It loads script from a CDN onto the origin that holds the session cookie.
     assert _setting("API_DOCS", SAFE) == "False"
     assert _setting("API_DOCS", {**SAFE, "API_DOCS": "1"}) == "True"
+
+
+def test_a_near_miss_database_variable_is_named_in_the_error() -> None:
+    """On Render the value is the "Internal Database URL"; pasted under INTERNAL_DATABASE_URL the
+    service failed to boot with no hint why."""
+    env = {k: v for k, v in SAFE.items() if k != "DATABASE_URL"}
+    env["INTERNAL_DATABASE_URL"] = "postgres://pulse:pulse@localhost:5432/pulse"
+    result = _load(env)
+    assert result.returncode != 0
+    assert "DATABASE_URL must be set in production" in result.stderr
+    assert "found INTERNAL_DATABASE_URL" in result.stderr
+    assert "pulse:pulse" not in result.stderr, "only the name, never the value"

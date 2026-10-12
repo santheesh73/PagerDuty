@@ -117,9 +117,10 @@ def test_an_ambiguous_timeout_is_retried_so_delivery_is_at_least_once_and_bounde
         raise ChannelError("timed out")  # ...but we never heard back
 
     with mock.patch.object(EmailChannel, "send", accepted_but_unacknowledged):
-        for _ in range(MAX_ATTEMPTS + 2):
-            with contextlib.suppress(ChannelError):  # Celery's retry
-                deliver(row.pk)
+        start = timezone.now()
+        for n in range(MAX_ATTEMPTS + 2):
+            with contextlib.suppress(ChannelError):  # Celery's retry, after its delay
+                deliver(row.pk, now=start + timedelta(hours=n))
 
     row.refresh_from_db()
     assert len(delivered) == MAX_ATTEMPTS, "bounded: never more copies than attempts"
@@ -151,3 +152,61 @@ def test_a_row_whose_last_attempt_died_is_failed_not_left_pending_forever(
     row.refresh_from_db()
     assert row.status == Notification.Status.FAILED
     assert open_incident.events.filter(type=EventType.NOTIFICATION_FAILED).exists()
+
+
+# --- the retry budget is minutes, not seconds (final audit M-12) ------------------------------
+
+
+def test_retries_back_off_for_minutes_so_a_short_outage_does_not_fail_a_page() -> None:
+    """Five attempts used to be spent in about 17 seconds, so an SMTP outage of 20 s failed the
+    email page for good. The delays now double from 30 s: 30, 60, 120, 240."""
+    from apps.notifications import actions
+    from apps.notifications.tasks import deliver_notification
+
+    assert deliver_notification.retry_backoff == actions.RETRY_BASE_SECONDS == 30
+    assert deliver_notification.retry_jitter is False
+    delays = [actions.retry_delay(n).total_seconds() for n in range(1, actions.MAX_ATTEMPTS)]
+    assert delays == [30, 60, 120, 240]
+    assert sum(delays) >= 7 * 60
+
+
+def test_a_failed_attempt_records_when_it_may_be_retried(open_incident: Incident) -> None:
+    from apps.notifications import actions
+    from apps.notifications.channels import ChannelError
+
+    row = email_row(open_incident)
+    now = timezone.now()
+    with mock.patch.object(EmailChannel, "send", side_effect=ChannelError("smtp down")):
+        with contextlib.suppress(ChannelError):
+            deliver(row.pk, now=now)
+        row.refresh_from_db()
+        assert row.next_attempt_at == now + actions.retry_delay(1)
+        # Too early: not claimed, not counted.
+        deliver(row.pk, now=now + timedelta(seconds=10))
+        row.refresh_from_db()
+        assert row.attempts == 1
+
+
+def test_the_sweepers_wait_out_a_retry_instead_of_spending_its_attempts(
+    open_incident: Incident,
+) -> None:
+    from apps.notifications import actions
+
+    row = email_row(open_incident)
+    now = timezone.now()
+    Notification.objects.filter(pk=row.pk).update(
+        attempts=1,
+        claimed_at=None,
+        next_attempt_at=now + timedelta(seconds=30),
+        updated_at=now - timedelta(seconds=200),
+    )
+    with mock.patch("apps.notifications.tasks.deliver_notification.delay") as delay:
+        assert actions.redispatch_stuck(now=now) == 0, "waiting out its delay"
+        assert actions.redispatch_stuck(now=now + timedelta(seconds=31)) == 1
+    assert delay.call_count == 1
+
+    with mock.patch.object(EmailChannel, "send") as send:
+        actions.deliver_due(now=now)
+        assert not send.called, "still inside the retry delay"
+        actions.deliver_due(now=now + timedelta(seconds=31))
+        assert send.called

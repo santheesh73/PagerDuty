@@ -69,6 +69,24 @@ class IncidentDetailSerializer(IncidentSerializer):
         return snapshot_with_names(obj)
 
 
+class DeliverySerializer(serializers.Serializer):
+    """One page to one person on one channel, and what became of it. No destination (phone number,
+    webhook host): who was paged is enough, and where is in the admin."""
+
+    id = serializers.IntegerField()
+    user = UserSummarySerializer()
+    channel = serializers.CharField()
+    status = serializers.CharField()
+    attempts = serializers.IntegerField()
+    last_error = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField()
+    sent_at = serializers.DateTimeField(allow_null=True)
+    next_attempt_at = serializers.DateTimeField(allow_null=True)
+
+    def get_last_error(self, obj: Any) -> str:
+        return (obj.last_error or "")[:300]
+
+
 class IncidentEventSerializer(serializers.ModelSerializer):
     actor = UserSummarySerializer(read_only=True, allow_null=True)
 

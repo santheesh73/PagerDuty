@@ -94,3 +94,32 @@ def test_counters_fail_open_when_the_cache_is_down() -> None:
     request = RequestFactory().post("/x", REMOTE_ADDR="203.0.113.7")
     with mock.patch.object(ratelimit.cache, "add", side_effect=ConnectionError("down")):
         assert ratelimit.allow("t", request, limit=0) is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_hits_on_the_database_cache_are_all_counted(settings) -> None:
+    """`incr` there is get-then-set, so racing workers lost increments: 16 hits counted as 2 to
+    5, and a limit of 12 let 13 of 30 parallel calls through (found by the final audit)."""
+    import threading
+
+    from django.db import connection
+
+    settings.CACHES = DB_CACHE
+    call_command("createcachetable", verbosity=0)
+    cache.clear()
+    barrier, seen = threading.Barrier(16), []
+
+    def worker() -> None:
+        try:
+            barrier.wait()
+            seen.append(ratelimit.hit("concurrent", 60))
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(seen) == list(range(1, 17)), "every hit got its own count"
+    assert ratelimit.count("concurrent") == 16

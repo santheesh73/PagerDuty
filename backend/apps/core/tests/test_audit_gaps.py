@@ -48,7 +48,7 @@ def test_a_retry_while_the_first_attempt_is_running_is_refused_not_run_twice() -
     client = APIClient()
     client.force_login(user)  # the middleware reads the session user, not DRF's
     scope, path, key = f"user:{user.pk}", "/api/v1/services/", "retry-1"
-    name = hashlib.sha256(f"{scope}|POST|{path}|{key}".encode()).hexdigest()
+    name = hashlib.sha256(f"{scope}|POST|{path}?|{key}".encode()).hexdigest()
     cache.set(f"idem-lock:{name}", 1, timeout=60)  # the first attempt holds the lock
 
     response = client.post(path, {"name": "x"}, format="json", HTTP_IDEMPOTENCY_KEY=key)

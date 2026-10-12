@@ -129,7 +129,7 @@ drills). Checks, each reported PASS/FAIL:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Pages never appear in Mailpit | `EMAIL_BACKEND` pinned to `console` in an old `.env` | delete that line (compose now forces SMTP to Mailpit in dev); with a real host set `EMAIL_HOST` and leave `EMAIL_BACKEND` unset |
-| Email page `failed` after 5 attempts | a header problem (multi-line title) or SMTP unreachable | titles are now collapsed to one line; check `last_error` on the notification and the worker log; check `EMAIL_HOST`/`EMAIL_TIMEOUT` |
+| Email page `failed` after 5 attempts | a header problem (multi-line title) or SMTP unreachable | titles are now collapsed to one line; read `last_error` from `GET /api/v1/incidents/<id>/notifications/` (responders and admins) and the worker log; check `EMAIL_HOST`/`EMAIL_TIMEOUT` |
 | Login returns 429 for everyone | `NUM_PROXIES` too high/low behind your own proxy chain, so every client shares one address | set it to the number of trusted hops; with nginx as the only proxy, `1` |
 | `docker compose kill api` and it stays down | a kill is a manual stop and restart policies respect it | `docker compose up -d api`. A real crash is restarted automatically |
 | First page late after a Redis outage | its delivery message was lost; the 60 s stuck-notification sweep re-drives rows older than 90 s | wait up to ~2.5 minutes; check `beat` is healthy |

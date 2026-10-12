@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import Membership, Team, User
 from apps.core import limits
+from apps.core.scoping import ScopedPrimaryKeyRelatedField
 from apps.schedules.models import Schedule
 
 from .models import EscalationPolicy, EscalationRule, EscalationTarget
@@ -34,7 +35,7 @@ class PolicyServiceSerializer(serializers.Serializer):
 class EscalationPolicySerializer(serializers.ModelSerializer):
     """A policy and its ordered levels. Writes replace `rules` wholesale, atomically."""
 
-    team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all())
+    team = ScopedPrimaryKeyRelatedField(queryset=Team.objects.all(), team_lookup="id")
     rules = RuleSerializer(many=True)
     services = PolicyServiceSerializer(many=True, read_only=True)
 

@@ -1,0 +1,261 @@
+# promtool unit tests for ops/alerts.yml: every alert fires on synthetic series and resolves.
+#   promtool test rules ops/alerts_test.yml   (CI runs it)
+# Each alert gets synthetic series that make it fire, then resolve. Time starts at 0 (epoch), so
+# pulse_beat_last_run_timestamp_seconds values are seconds since the test's t=0.
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+
+tests:
+  # ---------------------------------------------------------------- PulseApiDown
+  - interval: 1m
+    input_series:
+      - series: 'up{job="pulse-api", instance="api:8000"}'
+        values: '1 1 0 0 0 0 1 1'
+    alert_rule_test:
+      - {eval_time: 1m, alertname: PulseApiDown, exp_alerts: []}
+      - {eval_time: 3m, alertname: PulseApiDown, exp_alerts: []}   # pending (for: 2m)
+      - eval_time: 4m
+        alertname: PulseApiDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pulse-api, instance: "api:8000"}
+            exp_annotations: {summary: "Pulse API is not scrapable", runbook: "docs/RUNBOOK.md#common-failures"}
+      - {eval_time: 6m, alertname: PulseApiDown, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseBeatStalled
+  # Beat stamps every minute until t=5m (value 300), then stops; restarts at t=12m.
+  - interval: 1m
+    input_series:
+      - series: 'pulse_beat_last_run_timestamp_seconds{job="pulse-api", instance="api:8000"}'
+        values: '0+60x5 300x5 720+60x5'
+    alert_rule_test:
+      - {eval_time: 8m, alertname: PulseBeatStalled, exp_alerts: []}   # 180 s old: not > 180
+      - {eval_time: 9m, alertname: PulseBeatStalled, exp_alerts: []}   # 240 s: pending
+      - eval_time: 10m
+        alertname: PulseBeatStalled
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pulse-api, instance: "api:8000"}
+            exp_annotations:
+              summary: "Celery Beat has not run for over 3 minutes"
+              description: "Escalation sweeps and stuck-page recovery are driven by Beat. Exactly one beat process must run."
+              runbook: "docs/OBSERVABILITY.md#beat-stalled"
+      - {eval_time: 12m, alertname: PulseBeatStalled, exp_alerts: []}
+      - {eval_time: 12m, alertname: PulseBeatNeverSeen, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseBeatNeverSeen
+  - interval: 1m
+    input_series:
+      - series: 'pulse_celery_broker_up{job="pulse-api", instance="api:8000"}'
+        values: '1x20'
+      - series: 'pulse_beat_last_run_timestamp_seconds{job="pulse-api", instance="api:8000"}'
+        values: '_x12 720+60x5'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: PulseBeatNeverSeen, exp_alerts: []}   # pending (for: 3m)
+      - eval_time: 3m
+        alertname: PulseBeatNeverSeen
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "No Beat heartbeat has ever been recorded (or Redis was wiped and Beat is down)"
+              runbook: "docs/OBSERVABILITY.md#beat-stalled"
+      - {eval_time: 13m, alertname: PulseBeatNeverSeen, exp_alerts: []}
+
+  # ---------------------------------------------------------------- Redis lost AND Beat dead
+  # The heartbeat lives in Redis. After a wipe the series is absent, so PulseBeatStalled (which
+  # compares a value) cannot fire; PulseBeatNeverSeen covers it, three minutes after it vanished.
+  - interval: 1m
+    input_series:
+      - series: 'pulse_beat_last_run_timestamp_seconds{job="pulse-api", instance="api:8000"}'
+        values: '0+60x5 stale _x20'  # a scrape that no longer exports it marks the series stale
+    alert_rule_test:
+      - {eval_time: 10m, alertname: PulseBeatStalled, exp_alerts: []}
+      - eval_time: 10m
+        alertname: PulseBeatNeverSeen
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "No Beat heartbeat has ever been recorded (or Redis was wiped and Beat is down)"
+              runbook: "docs/OBSERVABILITY.md#beat-stalled"
+
+  # ---------------------------------------------------------------- PulseNoWorkers / PulseBrokerDown
+  - interval: 1m
+    input_series:
+      - series: 'pulse_celery_workers{job="pulse-api", instance="api:8000"}'
+        values: '2 2 0 0 0 0 2 2'
+      - series: 'pulse_celery_broker_up{job="pulse-api", instance="api:8000"}'
+        values: '1 1 0 0 0 0 1 1'
+    alert_rule_test:
+      - {eval_time: 3m, alertname: PulseNoWorkers, exp_alerts: []}
+      - eval_time: 4m
+        alertname: PulseNoWorkers
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pulse-api, instance: "api:8000"}
+            exp_annotations: {summary: "No Celery worker answers a ping", runbook: "docs/OBSERVABILITY.md#no-workers"}
+      - {eval_time: 6m, alertname: PulseNoWorkers, exp_alerts: []}
+      - {eval_time: 3m, alertname: PulseBrokerDown, exp_alerts: []}
+      - eval_time: 4m
+        alertname: PulseBrokerDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000"}
+            exp_annotations:
+              summary: "Redis (Celery broker) is unreachable; alerts are still accepted, the sweeper pages late"
+              runbook: "docs/RUNBOOK.md#common-failures"
+      - {eval_time: 6m, alertname: PulseBrokerDown, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseEscalationSweeperLag / PulseEscalationsOverdue
+  - interval: 1m
+    input_series:
+      - series: 'pulse_escalation_sweeper_lag_seconds{job="pulse-api", instance="api:8000"}'
+        values: '0 0 150 210 270 330 390 450 0 0'
+      - series: 'pulse_escalations_overdue{job="pulse-api", instance="api:8000"}'
+        values: '0 0 1 1 1 1 1 1 0 0'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: PulseEscalationSweeperLag, exp_alerts: []}
+      - eval_time: 3m
+        alertname: PulseEscalationSweeperLag
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pulse-api, instance: "api:8000"}
+            exp_annotations:
+              summary: "An escalation timer has been overdue for 3m 30s"
+              description: "Incidents are not moving up the policy. The sweeper runs every 30 s, so anything above ~60 s is abnormal."
+              runbook: "docs/OBSERVABILITY.md#sweeper-lag"
+      - {eval_time: 8m, alertname: PulseEscalationSweeperLag, exp_alerts: []}
+      - {eval_time: 6m, alertname: PulseEscalationsOverdue, exp_alerts: []}
+      - eval_time: 7m
+        alertname: PulseEscalationsOverdue
+        exp_alerts:
+          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000"}
+            exp_annotations: {summary: "1 escalation(s) overdue for 5+ minutes", runbook: "docs/OBSERVABILITY.md#sweeper-lag"}
+      - {eval_time: 8m, alertname: PulseEscalationsOverdue, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseNotificationsStuck
+  - interval: 1m
+    input_series:
+      - series: 'pulse_notifications_stuck{job="pulse-api", instance="api:8000"}'
+        values: '0 2 2 2 2 2 2 0'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: PulseNotificationsStuck, exp_alerts: []}
+      - eval_time: 6m
+        alertname: PulseNotificationsStuck
+        exp_alerts:
+          - exp_labels: {severity: critical, job: pulse-api, instance: "api:8000"}
+            exp_annotations:
+              summary: "2 page(s) pending for over 5 minutes"
+              description: "A page was created but never delivered and redelivery is not recovering it."
+              runbook: "docs/OBSERVABILITY.md#stuck-notifications"
+      - {eval_time: 7m, alertname: PulseNotificationsStuck, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseNotificationFailures
+  # One failure at t=3m, gone from the 15-minute window by t=18m.
+  - interval: 1m
+    input_series:
+      - series: 'pulse_notifications_failed_recent{job="pulse-api", instance="api:8000"}'
+        values: '0 0 0 1x14 0x10'
+    alert_rule_test:
+      - {eval_time: 2m, alertname: PulseNotificationFailures, exp_alerts: []}
+      - eval_time: 3m
+        alertname: PulseNotificationFailures
+        exp_alerts:
+          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000"}
+            exp_annotations:
+              summary: "1 notification(s) exhausted their retries in the last 15 minutes"
+              runbook: "docs/OBSERVABILITY.md#stuck-notifications"
+      - {eval_time: 20m, alertname: PulseNotificationFailures, exp_alerts: []}
+
+  # A retention purge deletes old failed rows. As a row count that looked like a counter reset and
+  # fired this alert with no new failure; the gauge only counts the last 15 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'pulse_notifications_total{job="pulse-api", instance="api:8000", channel="email", status="failed"}'
+        values: '50x5 40x10'
+      - series: 'pulse_notifications_failed_recent{job="pulse-api", instance="api:8000"}'
+        values: '0x15'
+    alert_rule_test:
+      - {eval_time: 6m, alertname: PulseNotificationFailures, exp_alerts: []}
+      - {eval_time: 10m, alertname: PulseNotificationFailures, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseDeliverySlow
+  # 100 pages sent; then 20 more, all taking 60-120 s (p95 in the 60-120 bucket), then nothing new.
+  - interval: 1m
+    input_series:
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="1",channel="email"}',    values: '90x30'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="5",channel="email"}',    values: '100x30'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="15",channel="email"}',   values: '100x30'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="30",channel="email"}',   values: '100x30'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="60",channel="email"}',   values: '100x30'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="120",channel="email"}',  values: '100+2x10 120x20'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="300",channel="email"}',  values: '100+2x10 120x20'}
+      - {series: 'pulse_notification_delivery_seconds_bucket{le="+Inf",channel="email"}', values: '100+2x10 120x20'}
+    alert_rule_test:
+      - {eval_time: 5m, alertname: PulseDeliverySlow, exp_alerts: []}   # pending since 1m
+      - eval_time: 6m
+        alertname: PulseDeliverySlow
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "p95 time from page created to sent is over 60 s", runbook: "docs/OBSERVABILITY.md#stuck-notifications"}
+      - {eval_time: 27m, alertname: PulseDeliverySlow, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseIngestRejectingServerErrors
+  - interval: 1m
+    input_series:
+      - series: 'pulse_ingest_requests_total{job="pulse-api", instance="api:8000", result="accepted"}'
+        values: '0+100x30'
+      - series: 'pulse_ingest_requests_total{job="pulse-api", instance="api:8000", result="rejected_503"}'
+        values: '0 0 10 20 30 40 50 60 60x20'
+    alert_rule_test:
+      - {eval_time: 4m, alertname: PulseIngestRejectingServerErrors, exp_alerts: []}
+      - eval_time: 5m
+        alertname: PulseIngestRejectingServerErrors
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "The Events API is returning 5xx: monitoring alerts are being dropped", runbook: "docs/OBSERVABILITY.md#ingest-errors"}
+      - {eval_time: 14m, alertname: PulseIngestRejectingServerErrors, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseIngestSlow
+  - interval: 1m
+    input_series:
+      - {series: 'pulse_ingest_latency_seconds_bucket{le="0.5"}',  values: '0+100x40'}
+      - {series: 'pulse_ingest_latency_seconds_bucket{le="1"}',    values: '0+100x40'}
+      - {series: 'pulse_ingest_latency_seconds_bucket{le="2.5"}',  values: '0+102x15 1530+100x25'}
+      - {series: 'pulse_ingest_latency_seconds_bucket{le="5"}',    values: '0+102x15 1530+100x25'}
+      - {series: 'pulse_ingest_latency_seconds_bucket{le="+Inf"}', values: '0+102x15 1530+100x25'}
+    alert_rule_test:
+      - {eval_time: 10m, alertname: PulseIngestSlow, exp_alerts: []}   # pending since 1m
+      - eval_time: 11m
+        alertname: PulseIngestSlow
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "Events API p99 latency above 1 s"}
+      - {eval_time: 25m, alertname: PulseIngestSlow, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseHigh5xxRate
+  - interval: 1m
+    input_series:
+      - series: 'pulse_http_requests_total{method="GET", route="api/v1/incidents/", status="200"}'
+        values: '0+90x40'
+      - series: 'pulse_http_requests_total{method="POST", route="api/v1/events/", status="503"}'
+        values: '0+10x15 150x25'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: PulseHigh5xxRate, exp_alerts: []}
+      - eval_time: 11m
+        alertname: PulseHigh5xxRate
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "More than 5% of API requests are failing with 5xx"}
+      - {eval_time: 25m, alertname: PulseHigh5xxRate, exp_alerts: []}
+
+  # ---------------------------------------------------------------- PulseEscalationQueueBacklog
+  - interval: 1m
+    input_series:
+      - series: 'pulse_celery_queue_depth{job="pulse-api", instance="api:8000", queue="escalations"}'
+        values: '0 500 500 500 500 500 500 0'
+      - series: 'pulse_celery_queue_depth{job="pulse-api", instance="api:8000", queue="notifications"}'
+        values: '0 900 900 900 900 900 900 900'
+    alert_rule_test:
+      - {eval_time: 5m, alertname: PulseEscalationQueueBacklog, exp_alerts: []}
+      - eval_time: 6m
+        alertname: PulseEscalationQueueBacklog
+        exp_alerts:
+          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000", queue: escalations}
+            exp_annotations: {summary: "The escalations queue is backing up", runbook: "docs/OBSERVABILITY.md#no-workers"}
+      - {eval_time: 7m, alertname: PulseEscalationQueueBacklog, exp_alerts: []}

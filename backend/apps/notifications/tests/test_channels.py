@@ -140,10 +140,11 @@ def test_a_twilio_outage_is_retried_then_given_up_on(
     page(open_incident, [people.on_call], level=0, loop=0, seq=1)
     pk = row(open_incident, "sms").pk
 
-    for _ in range(MAX_ATTEMPTS - 1):
+    start = timezone.now()
+    for n in range(MAX_ATTEMPTS - 1):  # each retry waits out its delay (actions.retry_delay)
         with pytest.raises(ChannelError):
-            deliver(pk, now=timezone.now() + timedelta(hours=1))
-    last = deliver(pk, now=timezone.now() + timedelta(hours=1))
+            deliver(pk, now=start + timedelta(hours=n + 1))
+    last = deliver(pk, now=start + timedelta(hours=MAX_ATTEMPTS))
     assert last is not None
     assert last.status == Notification.Status.FAILED
     assert last.attempts == MAX_ATTEMPTS

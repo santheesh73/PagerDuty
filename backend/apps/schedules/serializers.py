@@ -7,6 +7,7 @@ from rest_framework import serializers
 from apps.accounts.models import Membership, Team
 from apps.accounts.serializers import UserSummarySerializer
 from apps.core import limits
+from apps.core.scoping import ScopedPrimaryKeyRelatedField
 
 from .models import (
     LAYER_START_MAX,
@@ -84,7 +85,7 @@ class LayerSerializer(serializers.ModelSerializer):
 class ScheduleSerializer(serializers.ModelSerializer):
     """Writes replace `layers` wholesale. Layer order is priority: the first layer wins."""
 
-    team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all())
+    team = ScopedPrimaryKeyRelatedField(queryset=Team.objects.all(), team_lookup="id")
     layers = LayerSerializer(many=True)
 
     class Meta:

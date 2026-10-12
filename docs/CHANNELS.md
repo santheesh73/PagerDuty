@@ -55,7 +55,7 @@ unanswered, use channel X", optionally only for high- or low-urgency incidents.
   recorded on the timeline once. `PUBLIC_BASE_URL` must be the origin Twilio calls, because the
   signature covers that URL.
 - **Failure classification:** Twilio 4xx (bad number, unverified trial number) fails the step at once;
-  5xx, 429 and network errors are retried with backoff up to 5 attempts.
+  5xx, 429 and network errors are retried up to 5 attempts, 30, 60, 120 and 240 s apart.
 
 ## Webhooks
 

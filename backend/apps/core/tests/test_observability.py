@@ -403,3 +403,24 @@ def test_sentry_is_not_initialised_without_a_dsn(settings) -> None:
 
     assert settings.SENTRY_DSN == ""
     assert not sentry_sdk.get_client().is_active()
+
+
+def test_recent_failures_are_a_gauge_that_retention_cannot_disturb() -> None:
+    """The alert used `increase()` of a row count, so a retention purge deleting old failed rows
+    looked like a counter reset and fired the alert with no new failure (50 rows down to 40 gave an
+    increase of about 43). A gauge of failures in the last 15 minutes ignores old rows."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    incident = IncidentFactory(status=Status.RESOLVED)
+    old = NotificationFactory(
+        incident=incident, status=Notification.Status.FAILED, channel=Notification.Channel.EMAIL
+    )
+    Notification.objects.filter(pk=old.pk).update(updated_at=timezone.now() - timedelta(hours=2))
+    assert value(scrape(), "pulse_notifications_failed_recent") == 0
+
+    NotificationFactory(
+        incident=incident, status=Notification.Status.FAILED, channel=Notification.Channel.EMAIL
+    )
+    assert value(scrape(), "pulse_notifications_failed_recent") == 1

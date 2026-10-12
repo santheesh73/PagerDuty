@@ -45,6 +45,9 @@ class Notification(TimeStampedModel):
     # database is the timer, exactly like escalations: the ETA task is the fast path and the
     # stuck-notification sweep re-drives anything due whose message was lost.
     not_before = models.DateTimeField(null=True, blank=True)
+    # After a failed attempt: not before this time (actions.retry_delay). Nullable, so the previous
+    # release can still insert rows.
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
     # The new columns keep a database-level default (or allow NULL) so the previous release, still
     # running during a rolling deploy, can insert rows without knowing they exist (expand step).
     # Where it went, frozen at creation (a phone number or webhook host), so the record stays

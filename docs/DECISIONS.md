@@ -44,6 +44,8 @@ proves it in CI.
 *that* level and loop, and already due. Every page is a `Notification` row with a unique
 `idempotency_key` (`incident:{id}:level:{n}:loop:{k}:user:{id}:channel:{c}`).
 
+*Update (final audit):* the guard, not `SKIP LOCKED`, is what prevents a double step (`SKIP LOCKED` is a latency choice), and the unique key stops a page being *created* twice. *Sending* is at-least-once: a worker that dies after the provider accepted a message, or a relay slower than the timeout, is retried, up to `MAX_ATTEMPTS`. See INVARIANTS I4.
+
 **Alternatives.** A distributed lock in Redis; "check then act" in application code;
 de-duplicating on the delivery side only.
 

@@ -1,0 +1,56 @@
+name: Mutation testing
+
+# Breaks one critical line at a time and requires the tests to notice (scripts/mutate.py, about ten
+# minutes). Too slow for every push, so it runs weekly and on demand; a mutant that survives
+# without a documented reason fails the run.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    name: Mutation harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pulse
+          POSTGRES_PASSWORD: pulse
+          POSTGRES_DB: pulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pulse" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://pulse:pulse@localhost:5432/pulse
+      REDIS_URL: redis://localhost:6379/0
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: "0.11.32"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+        working-directory: backend
+      # The backup-script tests need the real pg_dump, which must match the server's major version.
+      - name: Install the PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Every mutation is caught (or a documented equivalent)
+        run: python3 scripts/mutate.py

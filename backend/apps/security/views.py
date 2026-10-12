@@ -282,6 +282,10 @@ class PasswordResetRequestView(APIView):
         if user is not None and per_address <= 3:  # at most 3 emails an hour to one address
             dispatch.on_commit(passwords.send_reset_email, user.pk)
             audit.record("auth.password_reset_requested", request=request, actor=user)
+        elif user is None:
+            # The same database write for an address with no account, so how long the request
+            # takes does not say whether one exists.
+            audit.record("auth.password_reset_requested", request=request, attempted_email=email)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -70,43 +70,34 @@ class IdempotencyMiddleware:
         if scope is None:
             return self.get_response(request)
 
-        name = hashlib.sha256(f"{scope}|{request.method}|{request.path}|{key}".encode()).hexdigest()
+        # The query string is part of the request: `?force=1` is not a retry of the plain call.
+        target = f"{request.path}?{request.META.get('QUERY_STRING', '')}"
+        name = hashlib.sha256(f"{scope}|{request.method}|{target}|{key}".encode()).hexdigest()
         stored_key, lock_key = f"idem:{name}", f"idem-lock:{name}"
         fingerprint = hashlib.sha256(request.body or b"").hexdigest()
         try:
             stored = cache.get(stored_key)
-            if stored is not None:
-                if stored["fingerprint"] != fingerprint:
+            if stored is None:
+                if not cache.add(lock_key, 1, timeout=IN_FLIGHT_TTL):
                     return envelope(
-                        "idempotency_key_reused",
-                        "This Idempotency-Key was used with a different request body.",
-                        422,
-                    )
-                if stored.get("withheld"):
-                    return envelope(
-                        "idempotency_response_withheld",
-                        "The request with this Idempotency-Key already succeeded. Its response held"
-                        " a secret that is shown only once, so it is not replayed.",
+                        "idempotency_in_progress",
+                        "A request with this Idempotency-Key is still being processed.",
                         409,
                     )
-                response = HttpResponse(
-                    stored["body"], status=stored["status"], content_type=stored["content_type"]
-                )
-                response["Idempotent-Replayed"] = "true"
-                return response
-            if not cache.add(lock_key, 1, timeout=IN_FLIGHT_TTL):
-                return envelope(
-                    "idempotency_in_progress",
-                    "A request with this Idempotency-Key is still being processed.",
-                    409,
-                )
+                # We hold the lock, but the first attempt may have finished (stored its answer
+                # and released the lock) between our read and our lock: look once more.
+                stored = cache.get(stored_key)
+                if stored is not None:
+                    cache.delete(lock_key)
+            if stored is not None:
+                return _replay(stored, fingerprint)
         except Exception as exc:  # the cache is disposable: run the request without replay
             logger.warning("idempotency cache unavailable (%s)", type(exc).__name__)
             return self.get_response(request)
 
         try:
             response = self.get_response(request)
-            if response.status_code < 500 and not getattr(response, "streaming", False):
+            if _is_final(response):
                 if "no-store" in response.get("Cache-Control", ""):
                     entry = {"fingerprint": fingerprint, "withheld": True}
                 else:
@@ -123,3 +114,38 @@ class IdempotencyMiddleware:
         finally:
             with contextlib.suppress(Exception):  # best effort; the lock expires on its own
                 cache.delete(lock_key)
+
+
+# Refusals that say "not now" rather than "no": a retry after the throttle window or the conflict
+# must run, not be handed the old refusal for 24 hours (a stored 429 meant the alert was never
+# ingested).
+TRANSIENT = {408, 409, 425, 429}
+
+
+def _is_final(response: HttpResponse) -> bool:
+    return (
+        response.status_code < 500
+        and response.status_code not in TRANSIENT
+        and not getattr(response, "streaming", False)
+    )
+
+
+def _replay(stored: dict, fingerprint: str) -> HttpResponse:
+    if stored["fingerprint"] != fingerprint:
+        return envelope(
+            "idempotency_key_reused",
+            "This Idempotency-Key was used with a different request body.",
+            422,
+        )
+    if stored.get("withheld"):
+        return envelope(
+            "idempotency_response_withheld",
+            "The request with this Idempotency-Key already succeeded. Its response held"
+            " a secret that is shown only once, so it is not replayed.",
+            409,
+        )
+    response = HttpResponse(
+        stored["body"], status=stored["status"], content_type=stored["content_type"]
+    )
+    response["Idempotent-Replayed"] = "true"
+    return response

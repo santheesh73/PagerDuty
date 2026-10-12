@@ -10,13 +10,14 @@ from rest_framework.serializers import BaseSerializer
 from apps.core.pagination import CursorPagination
 from apps.core.params import choices_param, datetime_param, int_param
 from apps.core.permissions import CanRespond, Role, has_role
-from apps.core.views import actor
+from apps.core.views import actor, require_role
 
 from . import actions
 from .models import Incident, Status, Urgency
 from .selectors import filter_incidents, timeline, visible_incidents
 from .serializers import (
     AlertSerializer,
+    DeliverySerializer,
     IncidentDetailSerializer,
     IncidentEventSerializer,
     IncidentSerializer,
@@ -134,6 +135,15 @@ class IncidentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
     def timeline(self, request: Request, pk: str | None = None) -> Response:
         page = self.paginate_queryset(timeline(self.get_object()))
         return self.get_paginated_response(IncidentEventSerializer(page, many=True).data)
+
+    @extend_schema(responses=DeliverySerializer(many=True))
+    @action(detail=True, methods=["get"], pagination_class=None)
+    def notifications(self, request: Request, pk: str | None = None) -> Response:
+        """How each page of this incident was delivered, and the error when one failed."""
+        incident = self.get_object()
+        require_role(request.user, incident.service.team_id, Role.RESPONDER)
+        rows = incident.notifications.select_related("user").order_by("created_at", "id")[:200]
+        return Response(DeliverySerializer(rows, many=True).data)
 
     @extend_schema(responses=AlertSerializer(many=True))
     @action(detail=True, methods=["get"], pagination_class=AlertCursorPagination)

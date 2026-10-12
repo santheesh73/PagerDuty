@@ -61,7 +61,7 @@ At most one `Notification` row exists per `(incident, level, loop, seq, user, ch
 
 - **Mechanism.**
   1. The idempotency key `incident:{id}:level:{n}:loop:{k}:user:{id}:channel:{c}[:seq:{event}]` encodes exactly that tuple and is `UNIQUE` in Postgres. Rows are created with `get_or_create` on it (`notifications/actions.py::page`).
-  2. The engine's guarded query (`escalations/engine.py::escalate`) only matches an incident still triggered, at the expected level and loop, and already due, under `SELECT … FOR UPDATE SKIP LOCKED`. A second caller matches nothing.
+  2. The engine's guarded query (`escalations/engine.py::escalate`) only matches an incident still triggered, at the expected level and loop, and already due, under `SELECT … FOR UPDATE SKIP LOCKED`. A second caller matches nothing. (The guard is what prevents a double step; `SKIP LOCKED` only keeps a worker from queueing behind a held row, so it is a latency choice. The mutation harness lists it as a documented equivalent: removing it changes how long a sweep can stall, not what it does.)
   3. Delivery *claims* the row under a row lock (`status = 'pending'` and no fresh `claimed_at`), counts the attempt, commits, and only then sends with no transaction open; a second concurrent worker sees the fresh claim and returns. A claim left by a dead worker expires after `CLAIM_TTL` (60 s) (`notifications/actions.py::deliver`).
 - **Proof.** `escalations/tests/test_engine.py::test_eta_task_and_sweeper_double_fire_pages_once` · `test_concurrent_escalations_of_one_incident_page_once` (4 threads) · `notifications/tests/test_delivery.py::test_paging_twice_never_double_pages` · `test_redelivery_of_a_sent_notification_is_a_no_op` · `notifications/tests/test_delivery_claim.py` (two workers racing on one row send once; a fresh claim is respected; a dead worker's claim expires; the send runs with no transaction and no row lock) · `alerting/tests/test_ingest.py::test_duplicates_do_not_page_again`.
 - **Status.** Row uniqueness is enforced by Postgres. Never-concurrent and never-after-sent are example-tested; the bounded repeat after an ambiguous failure is pinned by `test_an_ambiguous_timeout_is_retried_so_delivery_is_at_least_once_and_bounded`. Simulated, with tasks executed twice and concurrent sweepers.
@@ -177,7 +177,7 @@ Maintenance and debug both stop real pages, so a window must have an end, at mos
 
 ### I15 — A failing channel gives up after bounded retries
 
-A notification that keeps failing, with any exception type, is retried with backoff and then marked `failed` with a `notification_failed` timeline event. It is never re-driven forever.
+A notification that keeps failing, with any exception type, is retried (30, 60, 120, 240 s apart, so about 7.5 minutes in all) and then marked `failed` with a `notification_failed` timeline event. It is never re-driven forever.
 
 - **Mechanism.** `notifications/actions.py::deliver` counts every exception as an attempt (the count is committed at claim time, before the send) and re-raises after settling. At `MAX_ATTEMPTS` the row becomes `failed`. `redispatch_stuck` skips rows that have exhausted their attempts.
 - **Proof.** `notifications/tests/test_delivery.py::test_transient_failures_retry_then_fail_permanently` · `notifications/tests/test_poison_delivery.py` (all three tests).
