@@ -160,3 +160,53 @@ def test_a_response_stored_while_this_request_waited_for_the_lock_is_replayed(mo
     response = write()  # B
     assert ran == [1], "the write ran once"
     assert response["Idempotent-Replayed"] == "true"
+
+
+# --- another team's id looks exactly like one that does not exist (L-1) -----------------------
+
+
+@pytest.fixture
+def outsider():
+    from apps.accounts.models import Membership
+
+    a, b = ServiceFactory(), ServiceFactory()
+    user = UserFactory()
+    Membership.objects.create(user=user, team=b.team, role=Membership.Role.ADMIN)
+    client = APIClient()
+    client.force_login(user)
+    return client, a
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/v1/services/?team={team}",
+        "/api/v1/services/?escalation_policy={policy}",
+        "/api/v1/escalation-policies/?team={team}",
+        "/api/v1/schedules/?team={team}",
+    ],
+)
+def test_a_filter_naming_another_teams_object_answers_like_an_unknown_id(outsider, url) -> None:
+    client, other = outsider
+    foreign = client.get(url.format(team=other.team_id, policy=other.escalation_policy_id))
+    missing = client.get(url.format(team=99999999, policy=99999999))
+    assert foreign.status_code == missing.status_code == 422
+    assert foreign.json() == missing.json()
+
+
+@pytest.mark.django_db
+def test_a_body_naming_another_teams_object_answers_like_an_unknown_id(outsider) -> None:
+    client, other = outsider
+
+    def post(team: int, policy: int):
+        return client.post(
+            "/api/v1/services/",
+            {"team": team, "name": "x", "escalation_policy": policy},
+            format="json",
+        )
+
+    foreign = post(other.team_id, other.escalation_policy_id)
+    missing = post(99999999, 99999999)
+    assert foreign.status_code == missing.status_code == 422
+    assert set(foreign.json()["error"]["details"]) == set(missing.json()["error"]["details"])

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django_filters import FilterSet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -11,9 +12,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from apps.accounts.models import User
+from apps.accounts.models import Team, User
 from apps.core.params import datetime_param
 from apps.core.permissions import IsTeamMember, Role
+from apps.core.scoping import scoped_choice_filter
 from apps.core.views import require_role, scope_to_teams
 from apps.security.audit import AuditedMixin
 
@@ -34,12 +36,20 @@ def _parse_instant(request: Request, name: str, default: datetime) -> datetime:
     return datetime_param(request.query_params, name) or default
 
 
+class ScheduleFilter(FilterSet):
+    team = scoped_choice_filter(Team, "id")
+
+    class Meta:
+        model = Schedule
+        fields = ["team"]
+
+
 class ScheduleViewSet(AuditedMixin, viewsets.ModelViewSet):
     audit_name = "schedule"
 
     serializer_class = ScheduleSerializer
     permission_classes = [IsTeamMember]
-    filterset_fields = ["team"]
+    filterset_class = ScheduleFilter
 
     def get_queryset(self) -> QuerySet[Schedule]:
         return scope_to_teams(schedules_with_layers(), self.request.user).order_by("name", "id")

@@ -3,6 +3,7 @@ from dataclasses import asdict
 from typing import Any
 
 from django.db.models import Count, Q, QuerySet
+from django_filters import ChoiceFilter, FilterSet
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -11,9 +12,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from apps.accounts.models import Team
 from apps.alerting.actions import Event, ingest
 from apps.core.permissions import IsTeamMember, Role
+from apps.core.scoping import scoped_choice_filter
 from apps.core.views import actor, no_store, require_role, scope_to_teams
+from apps.escalations.models import EscalationPolicy
 from apps.incidents.models import Status
 from apps.security import audit
 from apps.security.audit import AuditedMixin
@@ -25,12 +29,22 @@ from .serializers import ServiceModeSerializer, ServiceSerializer, TestAlertResu
 OPEN = ~Q(incidents__status=Status.RESOLVED)
 
 
+class ServiceFilter(FilterSet):
+    team = scoped_choice_filter(Team, "id")
+    escalation_policy = scoped_choice_filter(EscalationPolicy, "team_id")
+    mode = ChoiceFilter(choices=Service.Mode.choices)
+
+    class Meta:
+        model = Service
+        fields = ["team", "mode", "escalation_policy"]
+
+
 class ServiceViewSet(AuditedMixin, viewsets.ModelViewSet):
     audit_name = "service"
 
     serializer_class = ServiceSerializer
     permission_classes = [IsTeamMember]
-    filterset_fields = ["team", "mode", "escalation_policy"]
+    filterset_class = ServiceFilter
 
     def get_queryset(self) -> QuerySet[Service]:
         return scope_to_teams(

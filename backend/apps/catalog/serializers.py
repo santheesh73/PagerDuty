@@ -8,6 +8,7 @@ from rest_framework import serializers
 from apps.accounts.models import Team
 from apps.core import limits
 from apps.core.permissions import Role, has_role
+from apps.core.scoping import ScopedPrimaryKeyRelatedField
 from apps.escalations.models import EscalationPolicy
 
 from .models import Service
@@ -19,8 +20,10 @@ class OpenCountsSerializer(serializers.Serializer):
 
 
 class ServiceSerializer(serializers.ModelSerializer):
-    team = serializers.PrimaryKeyRelatedField(queryset=Team.objects.all())
-    escalation_policy = serializers.PrimaryKeyRelatedField(queryset=EscalationPolicy.objects.all())
+    team = ScopedPrimaryKeyRelatedField(queryset=Team.objects.all(), team_lookup="id")
+    escalation_policy = ScopedPrimaryKeyRelatedField(
+        queryset=EscalationPolicy.objects.all(), team_lookup="team_id"
+    )
     escalation_policy_name = serializers.CharField(source="escalation_policy.name", read_only=True)
     integration_key = serializers.SerializerMethodField(
         help_text="The full key, returned exactly once: in the response that created or rotated "

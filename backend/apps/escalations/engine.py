@@ -31,8 +31,13 @@ from .snapshot import next_step
 logger = logging.getLogger(__name__)
 
 
-def resolve_targets(targets: list[dict[str, Any]], now: datetime) -> list[User]:
-    """Snapshot targets → active users, in policy order, without duplicates."""
+def resolve_targets(
+    targets: list[dict[str, Any]], now: datetime, team_id: int | None = None
+) -> list[User]:
+    """Snapshot targets → active users, in policy order, without duplicates.
+
+    With `team_id`, only people who are still members of that team: targets were checked when the
+    policy was saved, and someone removed since must not keep being woken by it."""
     schedule_ids = [t["id"] for t in targets if t["type"] == "schedule"]
     on_call = on_call_user_ids(schedule_ids, now) if schedule_ids else {}
     ordered: list[int] = []
@@ -40,7 +45,10 @@ def resolve_targets(targets: list[dict[str, Any]], now: datetime) -> list[User]:
         user_id = target["id"] if target["type"] == "user" else on_call.get(target["id"])
         if user_id is not None and user_id not in ordered:
             ordered.append(user_id)
-    users = User.objects.filter(is_active=True).in_bulk(ordered)
+    candidates = User.objects.filter(is_active=True)
+    if team_id is not None:
+        candidates = candidates.filter(memberships__team_id=team_id)
+    users = candidates.in_bulk(ordered)
     return [users[pk] for pk in ordered if pk in users]
 
 
@@ -51,7 +59,7 @@ def rule_at(incident: Incident, level: int) -> dict[str, Any] | None:
 
 def responders_at(incident: Incident, level: int, now: datetime) -> list[User]:
     rule = rule_at(incident, level)
-    return resolve_targets(rule["targets"], now) if rule else []
+    return resolve_targets(rule["targets"], now, incident.service.team_id) if rule else []
 
 
 def due_at(incident: Incident, now: datetime) -> datetime | None:
