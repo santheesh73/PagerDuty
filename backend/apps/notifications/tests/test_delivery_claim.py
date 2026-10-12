@@ -1,5 +1,6 @@
 """deliver() must not hold a database lock while it talks to SMTP, and must still send once."""
 
+import contextlib
 import threading
 import time
 from datetime import timedelta
@@ -96,3 +97,57 @@ def test_a_fresh_claim_by_another_worker_is_respected(open_incident: Incident) -
     with mock.patch.object(EmailChannel, "send") as send:
         assert deliver(row.pk).status == Notification.Status.PENDING
     send.assert_not_called()
+
+
+def test_an_ambiguous_timeout_is_retried_so_delivery_is_at_least_once_and_bounded(
+    open_incident: Incident,
+) -> None:
+    """A relay that accepts the message but answers slower than EMAIL_TIMEOUT looks like a failure
+    to us. We cannot tell "sent" from "not sent", and a pager prefers a repeat to a lost page, so
+    the send is retried up to MAX_ATTEMPTS: that many copies can arrive, and the row then fails.
+    Found live by the final audit (a 12 s relay, 5 copies). INVARIANTS I4 says exactly this."""
+    from apps.notifications.actions import MAX_ATTEMPTS
+    from apps.notifications.channels import ChannelError
+
+    row = email_row(open_incident)
+    delivered: list[int] = []
+
+    def accepted_but_unacknowledged(channel: EmailChannel, notification: Notification) -> None:
+        delivered.append(notification.pk)  # the relay has the message...
+        raise ChannelError("timed out")  # ...but we never heard back
+
+    with mock.patch.object(EmailChannel, "send", accepted_but_unacknowledged):
+        for _ in range(MAX_ATTEMPTS + 2):
+            with contextlib.suppress(ChannelError):  # Celery's retry
+                deliver(row.pk)
+
+    row.refresh_from_db()
+    assert len(delivered) == MAX_ATTEMPTS, "bounded: never more copies than attempts"
+    assert row.status == Notification.Status.FAILED
+
+
+@pytest.mark.parametrize("sweeper", ["deliver_due", "redispatch_stuck"])
+def test_a_row_whose_last_attempt_died_is_failed_not_left_pending_forever(
+    open_incident: Incident, sweeper: str
+) -> None:
+    """A worker that dies after taking its fifth claim leaves the row pending with attempts at the
+    cap. Both sweepers skipped such rows, so nothing ever failed them or told anyone (I5)."""
+    from apps.incidents.models import EventType
+    from apps.notifications import actions
+    from apps.notifications.actions import MAX_ATTEMPTS
+
+    row = email_row(open_incident)
+    long_ago = timezone.now() - timedelta(hours=1)
+    Notification.objects.filter(pk=row.pk).update(
+        attempts=MAX_ATTEMPTS, claimed_at=long_ago, updated_at=long_ago
+    )
+
+    with mock.patch("apps.notifications.tasks.deliver_notification.delay") as delay:
+        getattr(actions, sweeper)()
+        if sweeper == "redispatch_stuck":
+            assert delay.call_args_list == [mock.call(row.pk)], "handed to a worker"
+            actions.deliver(row.pk)
+
+    row.refresh_from_db()
+    assert row.status == Notification.Status.FAILED
+    assert open_incident.events.filter(type=EventType.NOTIFICATION_FAILED).exists()

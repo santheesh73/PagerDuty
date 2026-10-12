@@ -104,7 +104,7 @@ def escalate(
     """
     with transaction.atomic():
         incident = (
-            Incident.objects.select_for_update(skip_locked=True, of=("self",))
+            Incident.objects.select_for_update(skip_locked=True, no_key=True, of=("self",))
             .select_related("service")
             .filter(
                 pk=incident_id,

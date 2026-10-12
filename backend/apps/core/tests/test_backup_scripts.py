@@ -227,3 +227,35 @@ def test_restore_refuses_a_corrupt_dump_and_the_live_database(tmp_path: Path) ->
     bad = run(RESTORE, str(dump), "postgres://x:y@127.0.0.1:1/none")
     assert bad.returncode == 1
     assert "checksum mismatch" in bad.stderr
+
+
+def test_a_weekly_copy_that_fails_halfway_leaves_nothing_that_looks_like_a_backup(
+    tmp_path: Path,
+) -> None:
+    """Disk full while copying to weekly/ once left a truncated dump and an empty checksum under
+    their final names; retention then counted them and pushed out a good weekly copy."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    cp = fake_bin / "cp"
+    cp.write_text(
+        "#!/bin/sh\n"
+        "for last; do :; done\n"
+        '[ -d "$last" ] && last="$last/$(basename "$1")"  # like cp: into a directory\n'
+        'head -c 10 "$1" > "$last"  # the disk fills after ten bytes\n'
+        'echo "cp: No space left on device" >&2\nexit 1\n'
+    )
+    cp.chmod(0o755)
+    out = tmp_path / "out"
+    result = run(
+        BACKUP,
+        env={
+            "DATABASE_URL": db_url(),
+            "BACKUP_DIR": str(out),
+            "BACKUP_STAMP": "20260105T000000Z",
+            "BACKUP_WEEKLY_DOW": str(_iso_weekday_today()),
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        },
+    )
+    assert result.returncode != 0
+    assert list((out / "weekly").iterdir()) == [], "no file, partial or final, may be left"
+    assert (out / "daily" / "pulse-20260105T000000Z.dump").stat().st_size > 10

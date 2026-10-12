@@ -251,7 +251,15 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 # depend on it (the 60 s stuck-notification sweep re-drives within ~2.5 minutes), so it only has
 # to exceed the longest legitimate ETA wait to avoid pointless redelivery of escalation timers;
 # those are minutes, and the DB timer is authoritative anyway. Explicit rather than the default.
-CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 3600}
+# Socket timeouts bound a broker that accepts connections and never answers (a hung Redis): with
+# none, the publish in `on_commit` blocked the request for minutes after the incident was already
+# committed. A failed publish is logged and the sweeper re-drives it (core/dispatch.py).
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "visibility_timeout": 3600,
+    "socket_connect_timeout": 2,
+    "socket_timeout": 5,
+}
+CELERY_TASK_PUBLISH_RETRY_POLICY = {"max_retries": 1, "interval_start": 0, "interval_max": 0.2}
 # A wedged task must free its worker slot: nothing here runs longer than a few seconds (SMTP has
 # its own 10 s timeout), so 60 s soft / 90 s hard is generous.
 CELERY_TASK_SOFT_TIME_LIMIT = 60
@@ -458,6 +466,9 @@ if DEMO_MODE:
         "default": {
             "BACKEND": "django.core.cache.backends.db.DatabaseCache",
             "LOCATION": "pulse_cache",
+            # Django culls a third of the table at 300 rows (its default), alphabetically, which
+            # would evict the daily-reset guard and the sign-in lockout counters (final audit).
+            "OPTIONS": {"MAX_ENTRIES": 1_000_000},
         }
     }
 

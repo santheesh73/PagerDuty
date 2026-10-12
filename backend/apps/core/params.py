@@ -12,6 +12,9 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import ValidationError
 
+# Far enough either way for any real filter, near enough that adding a window never overflows.
+MIN_YEAR, MAX_YEAR = 1970, 9000
+
 
 def int_param(params: QueryDict, name: str) -> int | None:
     raw = params.get(name)
@@ -28,10 +31,15 @@ def datetime_param(params: QueryDict, name: str) -> datetime | None:
     raw = params.get(name)
     if not raw:
         return None
-    value = parse_datetime(raw)
-    if value is None:
-        raise ValidationError({name: "Expected an ISO-8601 datetime."})
-    return value if timezone.is_aware(value) else timezone.make_aware(value, UTC)
+    try:
+        value = parse_datetime(raw)  # well-formed but impossible ("02-30", "+25:00") raises
+        if value is not None:
+            value = value if timezone.is_aware(value) else timezone.make_aware(value, UTC)
+    except (ValueError, OverflowError):
+        value = None
+    if value is None or not MIN_YEAR <= value.year <= MAX_YEAR:
+        raise ValidationError({name: f"Expected an ISO-8601 datetime in {MIN_YEAR}-{MAX_YEAR}."})
+    return value
 
 
 def choices_param(params: QueryDict, name: str, allowed: set[str]) -> list[str] | None:

@@ -80,7 +80,7 @@ def _trigger(service: Service, event: Event, now: datetime) -> IngestResult:
                 # The unique index below stays as the backstop.
                 advisory_xact_lock("incident-key", service.pk, incident_key)
                 incident = (
-                    Incident.objects.select_for_update(of=("self",))
+                    Incident.objects.select_for_update(no_key=True, of=("self",))
                     .filter(service=service, dedup_key=incident_key)
                     .exclude(status=Status.RESOLVED)
                     .first()

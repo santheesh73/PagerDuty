@@ -31,7 +31,9 @@ mkdir -p "$DIR/daily" "$DIR/weekly"
 stamp="${BACKUP_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}" # BACKUP_STAMP only exists so tests get stable names
 name="pulse-$stamp.dump"
 partial="$DIR/.$name.partial"
-trap 'rm -f "$partial"' EXIT
+weekly_partial="$DIR/weekly/.$name.partial"
+weekly_partial_sum="$DIR/weekly/.$name.sha256.partial"
+trap 'rm -f "$partial" "$weekly_partial" "$weekly_partial_sum"' EXIT
 
 echo "backup: dumping to $DIR/daily/$name"
 pg_dump --format=custom --no-owner --no-privileges --dbname "$DATABASE_URL" --file "$partial"
@@ -50,7 +52,12 @@ mv "$partial" "$DIR/daily/$name"
 (cd "$DIR/daily" && sha256sum "$name" > "$name.sha256")
 
 if [ "$(date -u +%u)" = "$WEEKLY_DOW" ]; then
-  cp "$DIR/daily/$name" "$DIR/daily/$name.sha256" "$DIR/weekly/"
+  # Same rule as the daily dump: a copy that stops halfway (disk full) must never carry a final
+  # name, or retention would keep it and push out a good weekly.
+  cp "$DIR/daily/$name" "$weekly_partial"
+  cp "$DIR/daily/$name.sha256" "$weekly_partial_sum"
+  mv "$weekly_partial" "$DIR/weekly/$name"
+  mv "$weekly_partial_sum" "$DIR/weekly/$name.sha256"
 fi
 
 # Rotate only after a verified new dump exists, so a failing job never deletes the last good one.
