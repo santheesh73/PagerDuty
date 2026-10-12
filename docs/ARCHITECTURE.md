@@ -139,7 +139,7 @@ row lock. Combined with unique notification keys, that makes escalation idempote
 | Worker dies mid-task | `acks_late` + `reject_on_worker_lost` re-deliver the message; the guarded query makes the retry safe. |
 | ETA task and sweeper fire at the same moment | One wins the guarded row lock; the other matches nothing. Test: `test_eta_task_and_sweeper_double_fire_pages_once`. |
 | Two identical alerts arrive together | The partial unique index rejects the second insert; it retries as an attach. Test: 8 concurrent threads, one incident. |
-| Email provider flaps | Delivery retries with exponential backoff up to 5 attempts, then the row is `failed` and the timeline shows `notification_failed`. |
+| Email provider flaps | Delivery retries up to 5 attempts, waiting 30, 60, 120 and 240 s between them (about 7.5 minutes; `next_attempt_at` records the earliest next try, so the sweepers do not spend attempts early), then the row is `failed` and the timeline shows `notification_failed`. |
 | A policy is edited during an incident | The incident follows the snapshot it took at open time. |
 | Nobody is on call at a level | `no_responder` is logged and the incident is due immediately, so the next sweep moves on. |
 | Throttle cache (Redis) is down | Throttles fail open; ingest keeps working. |

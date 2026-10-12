@@ -55,10 +55,11 @@ def test_unexpected_error_still_spends_an_attempt(pending):
 
 def test_unexpected_error_eventually_marks_failed(pending):
     note, channel = pending
-    for _ in range(actions.MAX_ATTEMPTS - 1):
+    start = timezone.now()
+    for n in range(actions.MAX_ATTEMPTS - 1):
         with pytest.raises(ChannelError):
-            actions.deliver(note.pk)
-    actions.deliver(note.pk)  # final attempt gives up instead of raising
+            actions.deliver(note.pk, now=start + timedelta(hours=n))
+    actions.deliver(note.pk, now=start + timedelta(hours=actions.MAX_ATTEMPTS))  # gives up
     note.refresh_from_db()
     assert note.status == Notification.Status.FAILED
     assert note.attempts == actions.MAX_ATTEMPTS
@@ -67,9 +68,10 @@ def test_unexpected_error_eventually_marks_failed(pending):
 
 def test_exhausted_row_is_not_redispatched(pending):
     note, _ = pending
-    for _ in range(actions.MAX_ATTEMPTS - 1):
+    start = timezone.now()
+    for n in range(actions.MAX_ATTEMPTS - 1):
         with pytest.raises(ChannelError):
-            actions.deliver(note.pk)
-    actions.deliver(note.pk)
+            actions.deliver(note.pk, now=start + timedelta(hours=n))
+    actions.deliver(note.pk, now=start + timedelta(hours=actions.MAX_ATTEMPTS))
     Notification.objects.filter(pk=note.pk).update(updated_at=timezone.now() - timedelta(hours=1))
     assert actions.redispatch_stuck() == 0, "poison row was picked up again"

@@ -177,7 +177,7 @@ Maintenance and debug both stop real pages, so a window must have an end, at mos
 
 ### I15 — A failing channel gives up after bounded retries
 
-A notification that keeps failing, with any exception type, is retried with backoff and then marked `failed` with a `notification_failed` timeline event. It is never re-driven forever.
+A notification that keeps failing, with any exception type, is retried (30, 60, 120, 240 s apart, so about 7.5 minutes in all) and then marked `failed` with a `notification_failed` timeline event. It is never re-driven forever.
 
 - **Mechanism.** `notifications/actions.py::deliver` counts every exception as an attempt (the count is committed at claim time, before the send) and re-raises after settling. At `MAX_ATTEMPTS` the row becomes `failed`. `redispatch_stuck` skips rows that have exhausted their attempts.
 - **Proof.** `notifications/tests/test_delivery.py::test_transient_failures_retry_then_fail_permanently` · `notifications/tests/test_poison_delivery.py` (all three tests).

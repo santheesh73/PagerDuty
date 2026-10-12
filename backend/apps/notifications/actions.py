@@ -29,6 +29,17 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 STUCK_AFTER = timedelta(seconds=90)
+# A failed attempt is retried after 30 s, then 60, 120, 240: about seven and a half minutes in
+# all, so an SMTP outage of a minute or two does not fail the page. (It used to be five attempts in
+# about 17 seconds.) The Celery task, `redispatch_stuck` and `deliver_due` all honour this.
+RETRY_BASE_SECONDS = 30
+
+
+def retry_delay(attempts: int) -> timedelta:
+    """How long to wait after the `attempts`-th failed attempt before the next one."""
+    return timedelta(seconds=RETRY_BASE_SECONDS * 2 ** max(attempts - 1, 0))
+
+
 # How long a worker may hold a notification while sending before another may take over.
 # Must stay above EMAIL_TIMEOUT and below STUCK_AFTER, so a dead worker's page is retried by
 # the next sweep.
@@ -273,6 +284,8 @@ def _claim(notification_id: int, now: datetime) -> tuple[Notification | None, bo
                     notification,
                     False,
                 )  # I19: never before its time (an early or duplicate task)
+        if notification.next_attempt_at is not None and now < notification.next_attempt_at:
+            return notification, False  # a failed attempt is retried after its delay, not before
         if notification.claimed_at and now - notification.claimed_at < CLAIM_TTL:
             return notification, False  # another worker is sending it right now
         if notification.attempts >= MAX_ATTEMPTS:
@@ -318,7 +331,10 @@ def _settle(notification_id: int, error: Exception | None, now: datetime) -> Not
         if notification.attempts >= MAX_ATTEMPTS:
             _fail(notification, notification.last_error)
             return notification
-        notification.save(update_fields=["last_error", "claimed_at", "updated_at"])
+        notification.next_attempt_at = now + retry_delay(notification.attempts)
+        notification.save(
+            update_fields=["last_error", "claimed_at", "next_attempt_at", "updated_at"]
+        )
         return notification
 
 
@@ -348,11 +364,12 @@ def redispatch_stuck(*, now: datetime | None = None, limit: int = 500) -> int:
     ids = list(
         Notification.objects.filter(
             Q(not_before__isnull=True) | Q(not_before__lte=now),  # a future step is not stuck
+            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),  # nor a waiting retry
+            updated_at__lt=now - STUCK_AFTER,
             status=Notification.Status.PENDING,
             # `<=`: a worker that dies after its last claim leaves the row at the cap, and only
             # `deliver` (via `_claim`) can fail it, so the sweepers must hand it over too.
             attempts__lte=MAX_ATTEMPTS,
-            updated_at__lt=now - STUCK_AFTER,
         ).values_list("pk", flat=True)[:limit]
     )
     from .tasks import deliver_notification
@@ -377,6 +394,7 @@ def deliver_due(*, now: datetime | None = None, limit: int = 100) -> int:
     ids = list(
         Notification.objects.filter(
             Q(not_before__isnull=True) | Q(not_before__lte=now),
+            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),
             status=Notification.Status.PENDING,
             attempts__lte=MAX_ATTEMPTS,  # see redispatch_stuck
         )

@@ -65,11 +65,12 @@ def test_in_app_delivery_marks_sent_without_email(open_incident: Incident) -> No
 def test_transient_failures_retry_then_fail_permanently(open_incident: Incident) -> None:
     pk = email_row(open_incident).pk
     with mock.patch.object(EmailChannel, "send", side_effect=ChannelError("smtp down")):
-        for _ in range(MAX_ATTEMPTS - 1):
+        start = timezone.now()
+        for n in range(MAX_ATTEMPTS - 1):  # each retry waits out its delay
             with pytest.raises(ChannelError):
-                deliver(pk)
+                deliver(pk, now=start + timedelta(hours=n))
             assert Notification.objects.get(pk=pk).status == Notification.Status.PENDING
-        final = deliver(pk)  # last attempt: no raise, the row is marked failed
+        final = deliver(pk, now=start + timedelta(hours=MAX_ATTEMPTS))  # last: marked failed
 
     assert final is not None
     assert (final.status, final.attempts, final.last_error) == ("failed", MAX_ATTEMPTS, "smtp down")
