@@ -20,6 +20,15 @@ def envelope(code: str, message: str, status: int) -> JsonResponse:
     return JsonResponse({"error": {"code": code, "message": message, "details": {}}}, status=status)
 
 
+def csrf_failure(request: HttpRequest, reason: str = "") -> HttpResponse:
+    """Django's CSRF middleware answers with an HTML page; under /api/ it is the envelope."""
+    from django.views.csrf import csrf_failure as default
+
+    if _is_api(request):
+        return envelope("csrf_failed", "CSRF verification failed. Reload the page and retry.", 403)
+    return default(request, reason=reason)
+
+
 def _is_api(request: HttpRequest) -> bool:
     return request.path.startswith("/api/")
 

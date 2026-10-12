@@ -166,6 +166,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # --- Auth / sessions -------------------------------------------------------
 # The SPA is served from the same site (Vite proxy in dev, one origin in prod), so
 # cookie sessions + CSRF are the simplest secure option: no tokens in localStorage.
+CSRF_FAILURE_VIEW = "apps.core.api_errors.csrf_failure"
 SESSION_COOKIE_HTTPONLY = True
 # An absolute lifetime, not a sliding one: a stolen cookie dies on schedule however busy it is.
 SESSION_COOKIE_AGE = int(os.environ.get("SESSION_HOURS", "12")) * 3600

@@ -16,6 +16,13 @@ class EventSerializer(serializers.Serializer):
     dedup_key = serializers.CharField(max_length=255, required=False, allow_blank=True)
     payload = EventPayloadSerializer(required=False)
 
+    def validate_dedup_key(self, value: str) -> str:
+        # The key Pulse itself uses to group a service's maintenance-mode alerts: a monitor
+        # naming it would have a paging incident absorb them (and maintenance never close it).
+        if value == "__maintenance__":
+            raise serializers.ValidationError("This dedup key is reserved.")
+        return value
+
     def validate(self, attrs: dict) -> dict:
         if attrs["event_action"] == "trigger" and "payload" not in attrs:
             raise serializers.ValidationError({"payload": "Required for trigger events."})

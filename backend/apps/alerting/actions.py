@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from apps.catalog.models import Service
@@ -67,13 +67,16 @@ def ingest(service: Service, event: Event, *, now: datetime | None = None) -> In
 
 def _trigger(service: Service, event: Event, now: datetime) -> IngestResult:
     dedup_key = event.dedup_key or uuid.uuid4().hex
-    in_maintenance = service.mode == Service.Mode.MAINTENANCE
-    incident_key = MAINTENANCE_DEDUP_KEY if in_maintenance else dedup_key
     urgency = URGENCY_FOR_SEVERITY[Severity(event.severity)]
 
     for attempt in (1, 2):
         try:
             with transaction.atomic():
+                # The mode in force *now*, read under a shared row lock: a mode change in progress
+                # (the expiry sweep ending a maintenance window) holds the row exclusively, so we
+                # wait for it and see its result. The `service` we were handed may be stale.
+                in_maintenance = _mode_in_force(service) == Service.Mode.MAINTENANCE
+                incident_key = MAINTENANCE_DEDUP_KEY if in_maintenance else dedup_key
                 # Serialise open-or-attach per key. Without it, a loser re-reads, finds nothing
                 # open (the winner was resolved meanwhile), inserts, and loses again; under
                 # sustained churn two attempts were not enough and the alert was dropped (409).
@@ -121,6 +124,16 @@ def _trigger(service: Service, event: Event, now: datetime) -> IngestResult:
                 extra={"service_id": service.pk, "attempt": attempt},
             )
     raise IngestConflict("Could not attach the alert to an incident; please retry.")
+
+
+def _mode_in_force(service: Service) -> str:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT mode FROM {Service._meta.db_table} WHERE id = %s FOR SHARE",  # noqa: S608
+            [service.pk],
+        )
+        row = cursor.fetchone()
+    return row[0] if row else service.mode
 
 
 def _source_transition(service: Service, event: Event, now: datetime) -> IngestResult:
