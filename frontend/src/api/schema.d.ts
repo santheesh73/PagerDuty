@@ -357,6 +357,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/incidents/{id}/notifications/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description How each page of this incident was delivered, and the error when one failed. */
+    get: operations["incidents_notifications_list"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/incidents/{id}/reassign/": {
     parameters: {
       query?: never;
@@ -1281,6 +1298,24 @@ export interface components {
       mtta_seconds: number | null;
       /** Format: double */
       mttr_seconds: number | null;
+    };
+    /**
+     * @description One page to one person on one channel, and what became of it. No destination (phone number,
+     *     webhook host): who was paged is enough, and where is in the admin.
+     */
+    Delivery: {
+      id: number;
+      user: components["schemas"]["UserSummary"];
+      channel: string;
+      status: string;
+      attempts: number;
+      readonly last_error: string;
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      sent_at: string | null;
+      /** Format: date-time */
+      next_attempt_at: string | null;
     };
     DisableMfaRequest: {
       password: string;
@@ -2564,6 +2599,28 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["IncidentEvent"];
+        };
+      };
+    };
+  };
+  incidents_notifications_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this incident. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Delivery"][];
         };
       };
     };

@@ -694,6 +694,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/IncidentEvent'
           description: ''
+  /api/v1/incidents/{id}/notifications/:
+    get:
+      operationId: incidents_notifications_list
+      description: How each page of this incident was delivered, and the error when
+        one failed.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this incident.
+        required: true
+      tags:
+      - incidents
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Delivery'
+          description: ''
   /api/v1/incidents/{id}/reassign/:
     post:
       operationId: incidents_reassign_create
@@ -2455,6 +2480,46 @@ components:
       - mtta_seconds
       - mttr_seconds
       - time_to_first_response_seconds
+    Delivery:
+      type: object
+      description: |-
+        One page to one person on one channel, and what became of it. No destination (phone number,
+        webhook host): who was paged is enough, and where is in the admin.
+      properties:
+        id:
+          type: integer
+        user:
+          $ref: '#/components/schemas/UserSummary'
+        channel:
+          type: string
+        status:
+          type: string
+        attempts:
+          type: integer
+        last_error:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - attempts
+      - channel
+      - created_at
+      - id
+      - last_error
+      - next_attempt_at
+      - sent_at
+      - status
+      - user
     DisableMfaRequest:
       type: object
       properties:
