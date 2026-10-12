@@ -82,7 +82,7 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.22"
           cache: npm
@@ -179,7 +179,7 @@ jobs:
         run: |
           uv export --frozen --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.0 --strict --disable-pip --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.22"
       - name: npm dependencies have no high or critical advisories
@@ -228,7 +228,7 @@ jobs:
           NEW=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_new_keys']['values']['count'])")
           HOT=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])")
           docker compose -f docker-compose.prod.yml exec -T api python - --run-id "$RUN" --new-keys "$NEW" --hot-requests "$HOT" < loadtest/verify.py
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
