@@ -18,7 +18,7 @@ groups:
 
       - alert: PulseBeatStalled
         expr: time() - pulse_beat_last_run_timestamp_seconds > 180
-        for: 1m
+        for: 30s
         labels: {severity: critical}
         annotations:
           summary: "Celery Beat has not run for over 3 minutes"
@@ -27,7 +27,7 @@ groups:
 
       - alert: PulseBeatNeverSeen
         expr: absent(pulse_beat_last_run_timestamp_seconds)
-        for: 10m
+        for: 3m
         labels: {severity: critical}
         annotations:
           summary: "No Beat heartbeat has ever been recorded (or Redis was wiped and Beat is down)"

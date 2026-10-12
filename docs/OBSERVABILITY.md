@@ -48,7 +48,7 @@ incidents) that is milliseconds; the delivery histogram scans sent notifications
 
 | Alert | Fires when | First thing to do |
 |---|---|---|
-| `PulseBeatStalled` | no Beat heartbeat for 3 minutes | <a id="beat-stalled"></a>`docker compose ps beat`; exactly one must run. Restart it; the 30 s sweeper catches up on everything overdue |
+| `PulseBeatStalled` | no Beat heartbeat for over 3 minutes (fires about 3.5 minutes after Beat dies); `PulseBeatNeverSeen` covers a wiped Redis with Beat also down, after 3 minutes | <a id="beat-stalled"></a>`docker compose ps beat`; exactly one must run. Restart it; the 30 s sweeper catches up on everything overdue |
 | `PulseNoWorkers` | no worker answers a ping | <a id="no-workers"></a>`docker compose logs worker-escalations worker`; check Redis |
 | `PulseEscalationSweeperLag` | an escalation timer overdue > 2 minutes | <a id="sweeper-lag"></a>Beat or the escalations worker is down or wedged; `manage.py selfcheck` says which |
 | `PulseNotificationsStuck` | a page pending > 5 minutes | <a id="stuck-notifications"></a>Worker/SMTP problem; `last_error` on the notification; the 60 s stuck sweep re-drives |

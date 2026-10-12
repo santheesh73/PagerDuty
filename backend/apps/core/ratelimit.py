@@ -7,7 +7,9 @@ acknowledge a page because the limiter's store is down would be worse than not l
 import logging
 import time
 
-from django.core.cache import cache
+from django.core.cache import cache, caches
+from django.core.cache.backends.db import DatabaseCache
+from django.db import connection, transaction
 from django.http import HttpRequest
 from rest_framework.throttling import BaseThrottle
 
@@ -28,6 +30,17 @@ def hit(key: str, window: int) -> int:
     and cut a 15-minute lockout to five. So the window's start is stored, and both keys' expiry is
     pinned to its end after each count.
     """
+    if isinstance(caches["default"], DatabaseCache):
+        # Its `incr` is get-then-set, so racing workers lose increments (16 hits counted as 2 to 5).
+        # An advisory lock per key, inside one transaction, makes the count atomic.
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", [key])
+            return _hit(key, window)
+    return _hit(key, window)
+
+
+def _hit(key: str, window: int) -> int:
     now = time.time()
     cache.add(f"{key}:start", now, timeout=window)
     started = float(cache.get(f"{key}:start") or now)
