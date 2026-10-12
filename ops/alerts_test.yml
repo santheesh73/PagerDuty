@@ -146,20 +146,33 @@ tests:
       - {eval_time: 7m, alertname: PulseNotificationsStuck, exp_alerts: []}
 
   # ---------------------------------------------------------------- PulseNotificationFailures
+  # One failure at t=3m, gone from the 15-minute window by t=18m.
   - interval: 1m
     input_series:
-      - series: 'pulse_notifications_total{job="pulse-api", instance="api:8000", channel="email", status="failed"}'
-        values: '3 3 3 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4'
+      - series: 'pulse_notifications_failed_recent{job="pulse-api", instance="api:8000"}'
+        values: '0 0 0 1x14 0x10'
     alert_rule_test:
       - {eval_time: 2m, alertname: PulseNotificationFailures, exp_alerts: []}
       - eval_time: 3m
         alertname: PulseNotificationFailures
         exp_alerts:
-          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000", channel: email, status: failed}
+          - exp_labels: {severity: warning, job: pulse-api, instance: "api:8000"}
             exp_annotations:
-              summary: "1.1666666666666667 notification(s) exhausted their retries in the last 15 minutes"
+              summary: "1 notification(s) exhausted their retries in the last 15 minutes"
               runbook: "docs/OBSERVABILITY.md#stuck-notifications"
       - {eval_time: 20m, alertname: PulseNotificationFailures, exp_alerts: []}
+
+  # A retention purge deletes old failed rows. As a row count that looked like a counter reset and
+  # fired this alert with no new failure; the gauge only counts the last 15 minutes.
+  - interval: 1m
+    input_series:
+      - series: 'pulse_notifications_total{job="pulse-api", instance="api:8000", channel="email", status="failed"}'
+        values: '50x5 40x10'
+      - series: 'pulse_notifications_failed_recent{job="pulse-api", instance="api:8000"}'
+        values: '0x15'
+    alert_rule_test:
+      - {eval_time: 6m, alertname: PulseNotificationFailures, exp_alerts: []}
+      - {eval_time: 10m, alertname: PulseNotificationFailures, exp_alerts: []}
 
   # ---------------------------------------------------------------- PulseDeliverySlow
   # 100 pages sent; then 20 more, all taking 60-120 s (p95 in the 60-120 bucket), then nothing new.

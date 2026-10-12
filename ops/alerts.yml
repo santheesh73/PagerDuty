@@ -76,7 +76,9 @@ groups:
           runbook: "docs/OBSERVABILITY.md#stuck-notifications"
 
       - alert: PulseNotificationFailures
-        expr: increase(pulse_notifications_total{status="failed"}[15m]) > 0
+        # A gauge, not increase() of the row count: a retention purge lowers that count, which a
+        # counter reads as a reset (50 rows down to 40 once "increased" by about 43).
+        expr: pulse_notifications_failed_recent > 0
         for: 0m
         labels: {severity: warning}
         annotations:

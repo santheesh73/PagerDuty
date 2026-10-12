@@ -163,6 +163,13 @@ class StateCollector:
                 totals.add_metric([channel, status], grouped.get((channel, status), 0))
         yield totals
         yield GaugeMetricFamily(
+            "pulse_notifications_failed_recent",
+            "Notifications that exhausted their retries in the last 15 minutes",
+            value=Notification.objects.filter(
+                status=Notification.Status.FAILED, updated_at__gte=now - timedelta(minutes=15)
+            ).count(),
+        )
+        yield GaugeMetricFamily(
             "pulse_notifications_pending",
             "Notifications created but not yet delivered",
             value=Notification.objects.filter(status=Notification.Status.PENDING).count(),

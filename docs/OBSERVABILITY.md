@@ -30,6 +30,7 @@ gunicorn worker and restart. Request metrics are counted in-process and merged a
 | `pulse_escalations_overdue` | gauge | triggered incidents whose timer has expired |
 | `pulse_notifications_total{channel,status}` | counter | terminal outcomes only (`sent`, `failed`, `dry_run`, `cancelled`). `pending` is a gauge because it goes down |
 | `pulse_notifications_pending`, `pulse_notifications_stuck` | gauge | pending pages; pending for > 5 minutes (redelivery is failing) |
+| `pulse_notifications_failed_recent` | gauge | pages that exhausted their retries in the last 15 minutes (what `PulseNotificationFailures` watches; a gauge because a retention purge lowers a row count, which a counter reads as a reset) |
 | `pulse_notification_delivery_seconds{channel}` | histogram | created to sent, over all sent notifications |
 | `pulse_ingest_requests_total{result}` | counter | `accepted`, `ignored`, or `rejected_<http status>` |
 | `pulse_ingest_latency_seconds` | histogram | Events API latency |
