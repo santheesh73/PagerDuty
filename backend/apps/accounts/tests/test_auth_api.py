@@ -79,7 +79,8 @@ def _attempts_with_forged_forwarded_for(api_client: APIClient, count: int) -> li
     return [
         api_client.post(
             "/api/v1/auth/login/",
-            {"email": "x@y.z", "password": "bad"},
+            # A different account each time, so the per-account lockout cannot be what answers 429.
+            {"email": f"x{i}@example.test", "password": "bad"},
             format="json",
             HTTP_X_FORWARDED_FOR=f"10.9.8.{i}, 203.0.113.7",
         ).status_code
@@ -94,6 +95,16 @@ def test_a_forged_forwarded_for_prefix_does_not_reset_the_login_throttle(
     with override_settings(REST_FRAMEWORK=rest):
         codes = _attempts_with_forged_forwarded_for(api_client, 12)
     assert codes[-1] == 429
+
+
+def test_without_num_proxies_a_forged_prefix_does_bypass_the_throttle(
+    api_client: APIClient,
+) -> None:
+    """Why production settings refuse to start without NUM_PROXIES (core/tests/test_prod_settings)."""
+    rest = {**settings.REST_FRAMEWORK, "NUM_PROXIES": None}
+    with override_settings(REST_FRAMEWORK=rest):
+        codes = _attempts_with_forged_forwarded_for(api_client, 12)
+    assert set(codes) == {401}, "every forged address got a fresh allowance"
 
 
 def test_num_proxies_is_configurable_from_the_environment(monkeypatch) -> None:

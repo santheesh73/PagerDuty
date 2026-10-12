@@ -56,7 +56,7 @@ Build `deploy/demo/Dockerfile` with the repository root as context, then set:
 | `SECRET_KEY`, `TICK_SECRET` | `openssl rand -hex 32` and `openssl rand -hex 16` |
 | `ALLOWED_HOSTS` | Your public hostname |
 | `CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL` | `https://<hostname>` |
-| `NUM_PROXIES` | How many proxies append to `X-Forwarded-For` in front of the container (usually 1) |
+| `NUM_PROXIES` | **Required** (production settings refuse to start without it). How many proxies append to `X-Forwarded-For` in front of the container; `0` for none. Usually 1 |
 | `PORT` | The port the platform routes to (default 8000) |
 
 Health check: `GET /healthz`. The container migrates, seeds and starts gunicorn on its own.
@@ -111,6 +111,20 @@ If the smoke test fails, it switches straight back to the previous release. If i
 - `NUM_PROXIES=2` (Caddy, then nginx), so throttles see the real client address.
 
 Create the first staff account with `docker compose … exec api python manage.py createsuperuser`; it must set up MFA at first sign-in.
+
+### Check `NUM_PROXIES` after the first deploy
+
+A wrong value is silent: too low lets a client choose the address its sign-in limits see, too high puts everyone behind one address. With a made-up user, send 12 sign-ins that each carry a different forged first hop:
+
+```bash
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w '%{http_code} ' -X POST https://<hostname>/api/v1/auth/login/ \
+    -H "X-Forwarded-For: 10.9.$i.1" -H 'Content-Type: application/json' -H 'Origin: https://<hostname>' \
+    -d '{"email":"nobody@example.test","password":"x"}'
+done
+```
+
+Fetch a CSRF cookie first if your deployment needs one (`scripts/doctor.py` does this). With the right value the answers turn `429` from the 11th request; with a value too low they stay `401`.
 
 ## Post-deploy smoke test
 

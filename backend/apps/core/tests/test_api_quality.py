@@ -141,6 +141,16 @@ BAD_QUERIES = [
     ("/api/v1/analytics/timeseries/?service=1x", "service"),
     ("/api/v1/services/?mode=bogus", "mode"),
     ("/api/v1/audit-events/?team=abc", "team"),
+    # Well-formed but impossible instants once answered 500 (found by the final audit).
+    ("/api/v1/incidents/?since=2026-02-30T00:00:00Z", "since"),
+    ("/api/v1/incidents/?since=2026-01-01T00:00:00%2B25:00", "since"),
+    ("/api/v1/incidents/?until=2026-01-01T25:00:00", "until"),
+    ("/api/v1/analytics/summary/?since=2026-02-30T00:00:00Z", "since"),
+    ("/api/v1/analytics/timeseries/?since=0001-01-01T00:00:00Z", "since"),
+    (
+        "/api/v1/analytics/timeseries/?since=9999-06-01T00:00:00Z&until=9999-12-31T23:00:00Z",
+        "since",
+    ),
 ]
 
 

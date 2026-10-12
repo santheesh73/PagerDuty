@@ -45,13 +45,13 @@ scratch database, look, then repoint the app or `ALTER DATABASE ... RENAME`.
 
 `make backup-drill` (also a CI job, `Backup drill`) does, against any Postgres you can create databases in:
 
-1. migrate and seed a scratch database (24 tables, 400 incidents);
+1. migrate and seed a scratch database (every table, a few hundred incidents; the drill prints the exact counts);
 2. `backup.sh` it;
 3. `restore.sh` into a second scratch database;
-4. compare **row counts of every table, all 88 index definitions, all 92 constraint definitions, and every
+4. compare **row counts of every table, every index definition, every constraint definition, and every
    sequence value** (a stale sequence would hand out a duplicate incident number);
 5. boot the API against the restored copy: `/readyz` is 200, the demo admin logs in, the API lists all
-   400 incidents, and a **new alert is accepted** (which exercises the partial unique index
+   seeded incident, and a **new alert is accepted** (which exercises the partial unique index
    `uniq_open_incident_per_dedup_key` and the sequences).
 
 It drops both databases afterwards, even on failure.
@@ -88,7 +88,7 @@ Rules (also in [DECISIONS.md](DECISIONS.md#data-safety-production-readiness-phas
 `django-migration-linter` enforces the mechanical part in CI (`make lint-migrations`): dropping or
 renaming columns/tables, adding non-null columns without defaults, and non-reversible operations fail
 the build. Shown working: a throwaway `RemoveField` migration is rejected (`DROPPING columns`), the
-real ones pass 11/11.
+real ones pass (17 at the last count: 14 valid, 2 ignored, 1 warning). Warnings do not fail the build; the one today is `catalog/0002`, a plain `CREATE INDEX` on a small table.
 
 **Concurrent `migrate` was not safe, and is now.** Four `manage.py migrate` processes started at once
 on a fresh database failed 3 out of 4, every round (`duplicate key value violates unique constraint

@@ -24,7 +24,7 @@ Test paths are relative to `backend/apps/`.
 | [I1](#i1--at-most-one-open-incident-per-service-dedup_key-under-any-concurrency) | One open incident per `(service, dedup_key)`, under any concurrency | Postgres partial unique index |
 | [I2](#i2--a-schedule-resolves-to-exactly-one-responder-at-any-instant-or-to-nobody) | A schedule resolves to one member or nobody | Property-tested |
 | [I3](#i3--render_shifts-is-a-true-partition-that-agrees-with-on_call) | Rendered shifts partition the window and agree with `on_call` | Property-tested |
-| [I4](#i4--no-page-is-ever-duplicated) | No page is ever duplicated | Postgres unique key + guarded update |
+| [I4](#i4--no-page-is-ever-duplicated) | One page per responder and step; a send is retried only after a failure | Postgres unique key + guarded update |
 | [I5](#i5--no-page-is-ever-lost) | No page is ever lost | Example-tested + simulated |
 | [I6](#i6--escalation-terminates) | Escalation terminates | Example-tested + simulated |
 | [I7](#i7--no-stuck-timers) | No stuck timers | Example-tested + simulated |
@@ -55,20 +55,22 @@ Two identical alerts, however they interleave, become one incident with two aler
 
 ### I4 — No page is ever duplicated
 
-At most one `Notification` row exists per `(incident, level, loop, seq, user, channel)`, and each row is delivered at most once, even if the escalation runs twice, a task is delivered twice, or two sweepers race.
+At most one `Notification` row exists per `(incident, level, loop, seq, user, channel)`, and a row is never sent concurrently or again after it is recorded as sent, even if the escalation runs twice, a task is delivered twice, or two sweepers race.
+
+**What this does not promise.** Delivery is *at least once* across failures we cannot observe: a worker that dies after the provider accepted the message but before the row is settled, or a provider that accepts it but answers slower than the timeout, is retried (a pager prefers a repeat to a lost page). The repeats are bounded by `MAX_ATTEMPTS` (5), and a person can receive up to that many copies of one page. The final audit reproduced this live with a mail relay that took 12 s against a 10 s timeout (finding F1, residual risk).
 
 - **Mechanism.**
   1. The idempotency key `incident:{id}:level:{n}:loop:{k}:user:{id}:channel:{c}[:seq:{event}]` encodes exactly that tuple and is `UNIQUE` in Postgres. Rows are created with `get_or_create` on it (`notifications/actions.py::page`).
   2. The engine's guarded query (`escalations/engine.py::escalate`) only matches an incident still triggered, at the expected level and loop, and already due, under `SELECT … FOR UPDATE SKIP LOCKED`. A second caller matches nothing.
   3. Delivery *claims* the row under a row lock (`status = 'pending'` and no fresh `claimed_at`), counts the attempt, commits, and only then sends with no transaction open; a second concurrent worker sees the fresh claim and returns. A claim left by a dead worker expires after `CLAIM_TTL` (60 s) (`notifications/actions.py::deliver`).
 - **Proof.** `escalations/tests/test_engine.py::test_eta_task_and_sweeper_double_fire_pages_once` · `test_concurrent_escalations_of_one_incident_page_once` (4 threads) · `notifications/tests/test_delivery.py::test_paging_twice_never_double_pages` · `test_redelivery_of_a_sent_notification_is_a_no_op` · `notifications/tests/test_delivery_claim.py` (two workers racing on one row send once; a fresh claim is respected; a dead worker's claim expires; the send runs with no transaction and no row lock) · `alerting/tests/test_ingest.py::test_duplicates_do_not_page_again`.
-- **Status.** Row uniqueness is enforced by Postgres. Single delivery is example-tested. Simulated, with tasks executed twice and concurrent sweepers.
+- **Status.** Row uniqueness is enforced by Postgres. Never-concurrent and never-after-sent are example-tested; the bounded repeat after an ambiguous failure is pinned by `test_an_ambiguous_timeout_is_retried_so_delivery_is_at_least_once_and_bounded`. Simulated, with tasks executed twice and concurrent sweepers.
 
 ### I5 — No page is ever lost
 
 If an escalation step decides to page a reachable responder, a `Notification` row exists for them, whatever the broker did. Once the system drains, every row is delivered, recorded as a dry run, or marked failed after bounded retries; none stays pending forever.
 
-- **Mechanism.** Rows are written in the *same transaction* as the decision to page (open, escalate, unacknowledge, reassign), never by a later task. Enqueueing happens only after commit (`core/dispatch.py::on_commit`), and a broker failure is logged rather than raised. `sweep_stuck_notifications` re-dispatches rows still pending after two minutes. The escalation itself is recovered by the sweeper (I7).
+- **Mechanism.** Rows are written in the *same transaction* as the decision to page (open, escalate, unacknowledge, reassign), never by a later task. Enqueueing happens only after commit (`core/dispatch.py::on_commit`), and a broker failure is logged rather than raised. `sweep_stuck_notifications` re-dispatches rows still pending after 90 seconds (`STUCK_AFTER`). The escalation itself is recovered by the sweeper (I7).
 - **Proof.** `escalations/tests/test_engine.py::test_broker_outage_does_not_fail_ingest` · `test_sweeper_recovers_when_the_eta_message_is_lost` · `notifications/tests/test_delivery.py::test_sweeper_redispatches_pending_rows_whose_task_was_lost` · `notifications/tests/test_poison_delivery.py::test_unexpected_error_eventually_marks_failed`. Live: `make chaos-redis`.
 - **Status.** Example-tested. Simulated: every paging event's recipients must have rows for that page (`page_key`), always including the inbox entry, since the other channels follow each person's own plan; the drained system must have no pending rows.
 

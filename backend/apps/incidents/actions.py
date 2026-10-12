@@ -62,7 +62,9 @@ def allowed_actions(status: str) -> list[str]:
 
 def _lock(incident_id: int) -> Incident:
     return (
-        Incident.objects.select_for_update(of=("self",))
+        # NO KEY: a foreign-key insert (a timeline event, a notification) takes a shared lock on
+        # this row, which plain FOR UPDATE conflicts with and so crossed lock orders into deadlocks.
+        Incident.objects.select_for_update(no_key=True, of=("self",))
         .select_related("service")
         .get(pk=incident_id)
     )

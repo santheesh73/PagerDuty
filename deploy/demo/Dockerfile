@@ -44,6 +44,7 @@ USER pulse
 #   DEMO_SELF_TICK_SECONDS=30 timers advance while anyone is using it, with no scheduler at all
 ENV DJANGO_SETTINGS_MODULE=config.settings.prod \
     DEMO_MODE=1 \
+    API_DOCS=1 \
     SPA_DIR=/app/spa \
     SEED_DEMO=1 \
     DEMO_RESET_HOURS=24 \

@@ -11,7 +11,7 @@ from typing import Any
 
 from redis.exceptions import RedisError
 from rest_framework.request import Request
-from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,18 @@ class FailOpenMixin:
             return True
 
 
-class LoginThrottle(FailOpenMixin, AnonRateThrottle):
+class AddressThrottle(FailOpenMixin, SimpleRateThrottle):
+    """Per client address, signed in or not.
+
+    DRF's AnonRateThrottle stops counting once a request carries a session, so anyone signed
+    in to one account could guess another account's password or codes without a limit.
+    """
+
+    def get_cache_key(self, request: Request, view: APIView) -> str | None:
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
+class LoginThrottle(AddressThrottle):
     scope = "login"
 
 

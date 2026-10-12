@@ -56,7 +56,10 @@ Copy `.env.example` to `.env` for local use (it is git-ignored). Compose passes 
 | `SEED_DEMO` | `1` dev, `0` prod | demo teams, users, services and history; idempotent |
 | `SHOW_DEMO_CREDENTIALS` | `false` | prod web build arg: print the demo logins on the sign-in page |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_TIMEOUT`, `DEFAULT_FROM_EMAIL` | unset → console | setting `EMAIL_HOST` selects real SMTP; `EMAIL_TIMEOUT` defaults to 10 s. An explicit `EMAIL_BACKEND` always wins over `EMAIL_HOST` |
-| `NUM_PROXIES` | unset (dev), `1` (prod compose) | reverse proxies you trust to append to `X-Forwarded-For`; used for throttling. Unset trusts the whole header (spoofable) |
+| `API_DOCS` | on in dev, off in production settings | Swagger UI at `/api/docs/` (a CDN script on the session origin, so production serves it only when `API_DOCS=1`) |
+| `DEMO_ACCOUNT_GUARD` | follows `DEMO_MODE` | the shared `@demo.local` logins can't change credentials or end sessions, and session/audit lists hide visitors' addresses; set alone for a full stack that seeds the demo |
+| `MFA_LOCKOUT_FAILURES`, `MFA_LOCKOUT_SECONDS` | 10, 900 | wrong two-factor codes per account before the code step locks, across password steps |
+| `NUM_PROXIES` | unset (dev), required in production, `1` (prod compose) | reverse proxies you trust to append to `X-Forwarded-For`; used for throttling. Unset trusts the whole header (spoofable), so production settings refuse to start without it |
 | `THROTTLE_LOGIN`, `THROTTLE_EVENTS` | `10/min`, `120/min` (per key) | rate limits |
 | `GUNICORN_WORKERS`, `CELERY_CONCURRENCY`, `CELERY_QUEUES` | `3`, `4`, all three queues | the compose files give `worker-escalations` `CELERY_QUEUES=escalations` |
 | `METRICS_TOKEN`, `HEARTBEAT_URL`, `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`/`GIT_SHA` | unset (off) | observability, see [OBSERVABILITY.md](OBSERVABILITY.md): `/metrics` is a 404 without a token |

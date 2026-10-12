@@ -2,7 +2,9 @@
 
 A password change, or turning two-factor authentication on, on a shared login would lock every
 other visitor out until the next reset. So while DEMO_MODE is on, the seeded accounts cannot
-change their own credentials. Everything else stays open: a visitor can trigger, acknowledge and
+change their own credentials or end other visitors' sessions, and the session and audit lists
+hide visitors' IP addresses and browsers (every visitor shares the login, so each would see the
+others'). Everything else stays open: a visitor can trigger, acknowledge and
 resolve incidents, and edit services, policies and schedules. `DEMO_RESET_HOURS` reseeds the
 whole demo periodically to undo the rest.
 """
@@ -22,8 +24,14 @@ LOCKED_PATHS = frozenset(
         "/api/v1/me/mfa/confirm/",
         "/api/v1/me/mfa/disable/",
         "/api/v1/me/mfa/backup-codes/",
+        "/api/v1/me/sessions/revoke-others/",  # would sign every other visitor out
     }
 )
+LOCKED_PREFIXES = ("/api/v1/me/sessions/",)  # DELETE one session: the same, one at a time
+
+
+def guarding(user: object) -> bool:
+    return bool(settings.DEMO_ACCOUNT_GUARD) and is_demo_account(user)
 
 
 def is_demo_account(user: object) -> bool:
@@ -39,14 +47,14 @@ class DemoAccountGuardMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         if (
-            settings.DEMO_MODE
+            settings.DEMO_ACCOUNT_GUARD
             and request.method not in ("GET", "HEAD", "OPTIONS")
-            and request.path in LOCKED_PATHS
+            and (request.path in LOCKED_PATHS or request.path.startswith(LOCKED_PREFIXES))
             and is_demo_account(getattr(request, "user", None))
         ):
             return envelope(
                 "demo_account_locked",
-                "The shared demo accounts can't change their password or two-factor settings.",
+                "The shared demo accounts can't change their password, two-factor or sessions.",
                 403,
             )
         return self.get_response(request)

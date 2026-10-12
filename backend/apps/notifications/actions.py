@@ -349,7 +349,9 @@ def redispatch_stuck(*, now: datetime | None = None, limit: int = 500) -> int:
         Notification.objects.filter(
             Q(not_before__isnull=True) | Q(not_before__lte=now),  # a future step is not stuck
             status=Notification.Status.PENDING,
-            attempts__lt=MAX_ATTEMPTS,
+            # `<=`: a worker that dies after its last claim leaves the row at the cap, and only
+            # `deliver` (via `_claim`) can fail it, so the sweepers must hand it over too.
+            attempts__lte=MAX_ATTEMPTS,
             updated_at__lt=now - STUCK_AFTER,
         ).values_list("pk", flat=True)[:limit]
     )
@@ -376,7 +378,7 @@ def deliver_due(*, now: datetime | None = None, limit: int = 100) -> int:
         Notification.objects.filter(
             Q(not_before__isnull=True) | Q(not_before__lte=now),
             status=Notification.Status.PENDING,
-            attempts__lt=MAX_ATTEMPTS,
+            attempts__lte=MAX_ATTEMPTS,  # see redispatch_stuck
         )
         .order_by("pk")
         .values_list("pk", flat=True)[:limit]

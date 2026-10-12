@@ -21,7 +21,8 @@ def admin_login(request: HttpRequest) -> HttpResponseRedirect:
 admin.site.login = admin_login  # type: ignore[method-assign,assignment]
 
 # Swagger UI loads its assets from jsDelivr and boots with an inline script, so this one page gets
-# a looser policy. It renders only the public schema and handles no credentials of its own.
+# a looser policy, and prod.py serves it only when API_DOCS=1: the CDN script would run on the
+# same origin as the session cookie.
 _DOCS_CDN = "https://cdn.jsdelivr.net"
 api_docs = csp_override(
     {
@@ -47,7 +48,7 @@ urlpatterns = [
     path("api/v1/webhooks/twilio/voice/<str:token>/", webhooks.twilio_voice, name="twilio-voice"),
     path("admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", api_docs, name="docs"),
+    *([path("api/docs/", api_docs, name="docs")] if settings.API_DOCS else []),
     path("api/v1/", include("config.api_urls")),
     path("internal/tick/", tick.tick, name="tick"),
     # Last: every other path is a client-side route of the SPA when Django serves it (SPA_DIR, the

@@ -207,20 +207,22 @@ peer ranges); React Router 7 (v8 exists; v7 meets the floor with a stable API).
 human-friendly and race-free without a counter row lock. Like any sequence it can skip
 numbers after a rollback; that's acceptable for an identifier.
 
-## 18. HSTS is opt-in, and set to one year in the deploy config
+## 18. HSTS is on by default in production settings
 
-**Decision.** `SECURE_HSTS_SECONDS` defaults to `0` in `config.settings.prod`. The Render
-blueprint sets it to `31536000` (one year), without `includeSubdomains` or `preload`.
+**Decision.** `SECURE_HSTS_SECONDS` defaults to one year in `config.settings.prod`, without
+`includeSubdomains` or `preload` (both opt-in). *Update (final audit):* this entry originally
+made `0` the default and the Render blueprint turned it on. The default changed in the security
+phase; browsers ignore HSTS sent over plain HTTP, so the `localhost` stack is unaffected, and
+`core/tests/test_audit_gaps.py` now pins the default.
 
-**Alternatives.** Default to a year in code; leave it off everywhere.
+**Alternatives.** Default to `0` and turn it on per deployment (the original choice); leave it off everywhere.
 
-**Why.** HSTS is sticky: once a browser has seen the header for a host it refuses plain HTTP
-there for the whole period, and the only fix is waiting it out. The same prod settings run
-the documented `docker-compose.prod.yml` stack on `http://localhost:8080`, where a year-long
-default would lock a developer's browser out of `localhost` for a year. So the code stays
-safe-by-default for that case and the deploy that is HTTPS-only turns it on explicitly. It is
-deliberately not preloaded: preload is effectively irreversible and shouldn't be decided by a
-demo blueprint.
+**Why.** HSTS is sticky: once a browser has seen the header over HTTPS for a host it refuses
+plain HTTP there for the whole period. A secure default is worth that, because a deployment that
+forgot to set it would silently send no HSTS. The local `docker-compose.prod.yml` stack is plain
+HTTP on `localhost:8080`, and browsers ignore the header over HTTP, so it cannot lock a
+developer out. `includeSubdomains` and preload stay off: they affect every subdomain, and
+preload is effectively irreversible, so they should not be decided by a default.
 
 ---
 
@@ -363,7 +365,7 @@ traceback per request; the prod compose no longer seeds demo data or prints demo
 ## What the carry-over audit found (production-readiness, phase 0)
 
 The independent audit's open findings were re-tested against `main`. Each fix has a test that failed
-before it; the rest are guards proven by `scripts/mutate.py` (23 critical-line mutations, all caught).
+before it; the rest are guards proven by `scripts/mutate.py` (critical-line mutations, all caught except one documented equivalent; the README states the measured count).
 
 - **Tenant scoping was correct but unprotected.** Removing team scoping from the services, policies,
   schedules, on-call, timeline and notification lists failed no test. `core/tests/test_tenant_matrix.py`

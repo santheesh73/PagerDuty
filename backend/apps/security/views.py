@@ -1,5 +1,7 @@
 import hashlib
+import logging
 
+from django.conf import settings
 from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -15,7 +17,7 @@ from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
@@ -23,7 +25,7 @@ from apps.accounts.serializers import MeSerializer
 from apps.core import dispatch, ratelimit
 from apps.core.params import int_param
 from apps.core.permissions import admin_team_ids
-from apps.core.throttling import FailOpenMixin
+from apps.core.throttling import AddressThrottle, FailOpenMixin
 from apps.core.views import actor, no_store
 
 from . import audit, mfa, passwords, sessions, totp
@@ -42,6 +44,8 @@ from .serializers import (
     SessionSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
 PENDING = "mfa_pending"
 PENDING_TTL = 300  # seconds between the password step and the code step
 PENDING_ATTEMPTS = 5
@@ -51,11 +55,11 @@ def _error(code: str, message: str, http: int) -> Response:
     return Response({"error": {"code": code, "message": message, "details": {}}}, status=http)
 
 
-class MfaThrottle(FailOpenMixin, AnonRateThrottle):
+class MfaThrottle(AddressThrottle):
     scope = "mfa"
 
 
-class PasswordResetThrottle(FailOpenMixin, AnonRateThrottle):
+class PasswordResetThrottle(AddressThrottle):
     scope = "password_reset"
 
 
@@ -64,6 +68,33 @@ class SensitiveUserThrottle(FailOpenMixin, UserRateThrottle):
 
 
 # --- the second sign-in step -------------------------------------------------------------------
+
+
+def _code_failures_key(user: User) -> str:
+    return f"mfa-fail:{user.pk}"
+
+
+def _codes_locked(user: User) -> bool:
+    """Wrong codes are counted per account across password steps, not only per step: the
+    per-step cap alone let anyone who knew the password keep starting new steps."""
+    try:
+        return ratelimit.count(_code_failures_key(user)) >= settings.MFA_LOCKOUT_FAILURES
+    except Exception:
+        return False  # cache down: the per-address and per-step limits still apply
+
+
+def _count_code_failure(user: User) -> None:
+    try:
+        ratelimit.hit(_code_failures_key(user), settings.MFA_LOCKOUT_SECONDS)
+    except Exception:
+        logger.warning("MFA lockout counter unavailable")
+
+
+def _clear_code_failures(user: User) -> None:
+    try:
+        ratelimit.reset(_code_failures_key(user))
+    except Exception:
+        logger.warning("MFA lockout counter unavailable")
 
 
 def start_pending(request: HttpRequest, user: User) -> None:
@@ -89,8 +120,17 @@ class LoginMfaView(APIView):
         if user is None:
             request.session.pop(PENDING, None)
             return _error("mfa_session_expired", "Sign in again.", status.HTTP_401_UNAUTHORIZED)
+        if _codes_locked(user):
+            # Checked before the code, so a guesser learns nothing even with the right one.
+            audit.record("auth.mfa_locked", request=request, actor=user)
+            return _error(
+                "too_many_attempts",
+                "Too many wrong codes for this account. Try again later.",
+                status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         method = mfa.verify(user, payload.validated_data["code"])
         if method is None:
+            _count_code_failure(user)
             pending["tries"] += 1
             if pending["tries"] >= PENDING_ATTEMPTS:
                 request.session.pop(PENDING, None)  # back to the password step
@@ -98,6 +138,7 @@ class LoginMfaView(APIView):
                 request.session[PENDING] = pending
             audit.record("auth.mfa_failed", request=request, actor=user)
             return _error("invalid_code", "That code is not right.", status.HTTP_401_UNAUTHORIZED)
+        _clear_code_failures(user)
         request.session.pop(PENDING, None)
         login(request._request, user, backend="django.contrib.auth.backends.ModelBackend")
         audit.record("auth.login", request=request, actor=user, mfa=method)

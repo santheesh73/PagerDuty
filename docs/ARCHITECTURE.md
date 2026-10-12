@@ -206,7 +206,7 @@ erDiagram
     }
     NOTIFICATION {
         string idempotency_key "UNIQUE"
-        string status "pending | sent | failed | dry_run"
+        string status "pending | sent | failed | dry_run | cancelled"
         int attempts
     }
     ESCALATION_TARGET {

@@ -31,7 +31,9 @@ mkdir -p "$DIR/daily" "$DIR/weekly"
 stamp="${BACKUP_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}" # BACKUP_STAMP only exists so tests get stable names
 name="pulse-$stamp.dump"
 partial="$DIR/.$name.partial"
-trap 'rm -f "$partial"' EXIT
+weekly_partial="$DIR/weekly/.$name.partial"
+weekly_partial_sum="$DIR/weekly/.$name.sha256.partial"
+trap 'rm -f "$partial" "$weekly_partial" "$weekly_partial_sum"' EXIT
 
 echo "backup: dumping to $DIR/daily/$name"
 pg_dump --format=custom --no-owner --no-privileges --dbname "$DATABASE_URL" --file "$partial"
@@ -50,14 +52,21 @@ mv "$partial" "$DIR/daily/$name"
 (cd "$DIR/daily" && sha256sum "$name" > "$name.sha256")
 
 if [ "$(date -u +%u)" = "$WEEKLY_DOW" ]; then
-  cp "$DIR/daily/$name" "$DIR/daily/$name.sha256" "$DIR/weekly/"
+  # Same rule as the daily dump: a copy that stops halfway (disk full) must never carry a final
+  # name, or retention would keep it and push out a good weekly.
+  cp "$DIR/daily/$name" "$weekly_partial"
+  cp "$DIR/daily/$name.sha256" "$weekly_partial_sum"
+  mv "$weekly_partial" "$DIR/weekly/$name"
+  mv "$weekly_partial_sum" "$DIR/weekly/$name.sha256"
 fi
 
 # Rotate only after a verified new dump exists, so a failing job never deletes the last good one.
 prune() { # dir keep
   local dir="$1" keep="$2" f
+  # An empty directory makes `ls` exit 2, which pipefail would turn into a failed backup (on
+  # every day but the weekly one, `weekly/` is empty): nothing to prune is not an error.
   # shellcheck disable=SC2012
-  ls -1t "$dir"/pulse-*.dump 2>/dev/null | tail -n +"$((keep + 1))" | while read -r f; do
+  { ls -1t "$dir"/pulse-*.dump 2>/dev/null || true; } | tail -n +"$((keep + 1))" | while read -r f; do
     rm -f "$f" "$f.sha256"
   done
 }

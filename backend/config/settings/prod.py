@@ -5,8 +5,10 @@ from django.core.exceptions import ImproperlyConfigured
 from .base import *  # noqa: F403
 from .base import env_bool
 
-# Refuse to boot with an unsafe configuration rather than silently fall back.
-for required in ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL"):
+# Refuse to boot with an unsafe configuration rather than silently fall back. NUM_PROXIES is
+# the number of proxies in front of the app ("0" for none): unset, DRF trusts the whole
+# X-Forwarded-For header, so a client picks the address its sign-in limits and audit log see.
+for required in ("SECRET_KEY", "ALLOWED_HOSTS", "DATABASE_URL", "NUM_PROXIES"):
     if not os.environ.get(required):
         raise ImproperlyConfigured(f"{required} must be set in production")
 
@@ -27,6 +29,7 @@ CSRF_COOKIE_SECURE = env_bool("SECURE_COOKIES", True)
 SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", str(365 * 24 * 3600)))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
 SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+API_DOCS = env_bool("API_DOCS", False)
 REQUIRE_MFA_FOR_ADMINS = env_bool("REQUIRE_MFA_FOR_ADMINS", True)
 # "__Host-" cookies are only accepted over HTTPS, for this exact host and path "/": a sibling
 # subdomain cannot set or overwrite them. Only meaningful with secure cookies.

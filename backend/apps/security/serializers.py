@@ -1,6 +1,8 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
+from apps.core.demo import guarding
+
 from .models import AuditEvent, SessionRecord
 
 
@@ -68,6 +70,12 @@ class SessionSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         return bool(request and request.session.session_key == obj.session_key)
 
+    def to_representation(self, instance: SessionRecord) -> dict:
+        data = super().to_representation(instance)
+        if guarding(getattr(self.context.get("request"), "user", None)):
+            data["ip"], data["user_agent"] = None, ""  # other visitors' addresses, see core/demo.py
+        return data
+
 
 class AuditEventSerializer(serializers.ModelSerializer):
     class Meta:
@@ -85,6 +93,12 @@ class AuditEventSerializer(serializers.ModelSerializer):
             "data",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance: AuditEvent) -> dict:
+        data = super().to_representation(instance)
+        if guarding(getattr(self.context.get("request"), "user", None)):
+            data["ip"] = None
+        return data
 
 
 class RevokedCountSerializer(serializers.Serializer):
