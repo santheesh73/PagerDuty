@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.10-alpine
     # No persistence on purpose: the broker is disposable.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:

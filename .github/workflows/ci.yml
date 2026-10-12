@@ -38,8 +38,8 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       HYPOTHESIS_PROFILE: ci
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.32"
           enable-cache: true
@@ -81,8 +81,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.22"
           cache: npm
@@ -102,8 +102,8 @@ jobs:
     name: Docker images build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Backend (prod target)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
@@ -155,7 +155,7 @@ jobs:
           done
       - name: Upload SBOMs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-images
           path: sbom/
@@ -170,8 +170,8 @@ jobs:
     name: Supply chain (pip-audit · npm audit · Trivy fs · SBOM)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.32"
       - name: Python dependencies have no known vulnerabilities (pip-audit)
@@ -179,7 +179,7 @@ jobs:
         run: |
           uv export --frozen --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.0 --strict --disable-pip --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.22"
       - name: npm dependencies have no high or critical advisories
@@ -196,7 +196,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/bin/trivy" fs --quiet --format cyclonedx --include-dev-deps \
             --output sbom-source.cdx.json .
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-source
           path: sbom-source.cdx.json
@@ -213,8 +213,8 @@ jobs:
       # The default 120/min per-key limit protects production; the smoke run needs headroom.
       THROTTLE_EVENTS: 100000/min
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Start the production-like stack
         run: docker compose -f docker-compose.prod.yml up --build -d --wait --wait-timeout 300
       - name: Load smoke (k6) and database invariants
@@ -228,7 +228,7 @@ jobs:
           NEW=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_new_keys']['values']['count'])")
           HOT=$(python3 -c "import json;print(json.load(open('k6out/summary.json'))['metrics']['pulse_hot_requests']['values']['count'])")
           docker compose -f docker-compose.prod.yml exec -T api python - --run-id "$RUN" --new-keys "$NEW" --hot-requests "$HOT" < loadtest/verify.py
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -241,7 +241,7 @@ jobs:
           npx playwright test
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-traces
           path: e2e/test-results
@@ -254,15 +254,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Boots the prod-like stack from scratch, drives the whole alert flow, then kills Redis,
       # the workers, the database and the API in turn and checks it recovers. See scripts/doctor.py.
       - name: make doctor
         run: ./scripts/doctor.sh
       - name: Upload stack logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doctor-logs
           path: doctor-logs.txt
@@ -272,8 +272,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # Boots docker-compose.demo.yml (Postgres, Mailpit and the one demo container), plays the
       # external scheduler against /internal/tick/, and runs the alert flow and the database and
       # API drills. Escalation has to work through the tick alone.
@@ -281,7 +281,7 @@ jobs:
         run: DOCTOR_MODE=demo DOCTOR_LOGS=doctor-demo-logs.txt ./scripts/doctor.sh
       - name: Upload stack logs on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doctor-demo-logs
           path: doctor-demo-logs.txt
@@ -290,7 +290,7 @@ jobs:
     name: Ops (promtool alert rules · Grafana JSON · compose overlay)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Alert rules and Prometheus config are valid
         run: |
           docker run --rm --entrypoint promtool -v "$PWD/ops:/ops:ro" prom/prometheus:v3.5.0 check rules /ops/alerts.yml
@@ -342,8 +342,8 @@ jobs:
       DATABASE_URL: postgres://pulse:pulse@localhost:5432/pulse
       REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.32"
           enable-cache: true

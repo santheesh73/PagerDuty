@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22.22-alpine AS deps
+FROM node:26.10-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -23,7 +23,7 @@ ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN VITE_RELEASE=$VITE_RELEASE
 COPY . .
 RUN npm run build
 
-FROM nginx:1.29-alpine AS prod
+FROM nginx:1.31-alpine AS prod
 # Runs as the unprivileged `nginx` user, not root: it listens on 8080 (no privileged port), keeps
 # its pid file in /tmp, and may write only the config files the entrypoint generates at start.
 ENV PORT=8080 API_UPSTREAM=http://backend:8000
