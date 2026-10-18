@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.31.6
     ports:
       - "8025:8025" # inbox UI and API; SMTP (1025) is internal to the stack
     healthcheck:

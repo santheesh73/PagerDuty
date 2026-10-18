@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
 
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.31.6
     ports: ["127.0.0.1:8025:8025"] # inbox UI and API for the smoke test; SMTP (1025) stays internal
     healthcheck: { test: ["CMD", "/mailpit", "readyz"], interval: 5s, retries: 12 }
     restart: unless-stopped
