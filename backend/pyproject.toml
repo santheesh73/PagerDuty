@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Pulse — incident orchestration API, Events ingest and escalation workers"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "django==6.0.9",
+    "django==6.1.2",
     "djangorestframework==3.18.3",
     "drf-spectacular==0.30.0",
     "django-filter==26.2",
@@ -15,22 +15,22 @@ dependencies = [
     "gunicorn==26.2.0",
     "whitenoise==6.12.0",
     "python-json-logger==4.2.0",
-    "sentry-sdk==2.71.0",
+    "sentry-sdk==2.73.0",
     "prometheus-client==0.26.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-django==4.14.0",
     "pytest-cov==7.1.0",
     "factory-boy==3.3.3",
-    "time-machine==3.5.1",
-    "hypothesis==6.168.5",
-    "ruff==0.17.0",
+    "time-machine==3.6.0",
+    "hypothesis==6.170.13",
+    "ruff==0.17.3",
     "mypy==2.3.1",
-    "django-stubs[compatible-mypy]==6.0.9",
-    "djangorestframework-stubs==3.16.9",
+    "django-stubs[compatible-mypy]==6.1.2",
+    "djangorestframework-stubs==3.18.1",
     "celery-types==0.26.0",
     "django-migration-linter==6.0.0",
 ]
