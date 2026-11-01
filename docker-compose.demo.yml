@@ -19,7 +19,7 @@ services:
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse -d pulse"], interval: 3s, retries: 20 }
 
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.32.0
     ports: ["127.0.0.1:8025:8025"]
     healthcheck: { test: ["CMD", "/mailpit", "readyz"], interval: 5s, retries: 12 }
 
