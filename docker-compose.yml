@@ -37,7 +37,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulse}
       POSTGRES_DB: ${POSTGRES_DB:-pulse}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pulse} -d ${POSTGRES_DB:-pulse}"]
       interval: 3s
