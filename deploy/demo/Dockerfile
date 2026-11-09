@@ -26,8 +26,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
-# Same as backend/Dockerfile: uv builds the venv, then pip (unused, and a scan finding) goes.
-RUN pip install --no-cache-dir uv==0.11.32 && pip uninstall --yes pip
+# Same as backend/Dockerfile: the base image's own packages lag Debian's security feed until it's
+# rebuilt, so apply those fixes before anything else runs in the image.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# uv builds the venv, then pip (unused, and a scan finding) goes.
+RUN pip install --no-cache-dir uv==0.13.7 && pip uninstall --yes pip
 WORKDIR /app
 RUN groupadd --system pulse && useradd --system --gid pulse --home /app pulse
 COPY backend/pyproject.toml backend/uv.lock ./

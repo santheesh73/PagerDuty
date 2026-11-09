@@ -8,9 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
+# The base image's own packages lag Debian's security feed until it's rebuilt; apply those
+# fixes (zlib's heap overflow among them) before anything else runs in the image.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 # uv builds and runs the app's venv; pip is then removed, since nothing uses it and its vendored
 # copies of urllib3 and msgpack would otherwise ship (and fail the image scan).
-RUN pip install --no-cache-dir uv==0.11.32 && pip uninstall --yes pip
+RUN pip install --no-cache-dir uv==0.13.7 && pip uninstall --yes pip
 WORKDIR /app
 RUN groupadd --system pulse && useradd --system --gid pulse --home /app pulse
 
