@@ -118,7 +118,9 @@ class OverrideViewSet(AuditedMixin, viewsets.ModelViewSet):
         return overrides.select_related("user").order_by("start", "id")
 
     def get_serializer_context(self) -> dict:
-        context = super().get_serializer_context()
+        # A newer djangorestframework-stubs types the base method's return as a read-only
+        # Mapping; copy it into a plain dict before adding our own key.
+        context = dict(super().get_serializer_context())
         if "schedule_pk" in self.kwargs and not getattr(self, "swagger_fake_view", False):
             context["schedule"] = self.get_schedule()
         return context
