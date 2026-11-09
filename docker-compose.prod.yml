@@ -61,9 +61,9 @@ x-worker-health: &worker-health
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment: { POSTGRES_USER: pulse, POSTGRES_PASSWORD: pulse, POSTGRES_DB: pulse }
-    volumes: [pgdata-prod:/var/lib/postgresql/data]
+    volumes: [pgdata-prod:/var/lib/postgresql]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U pulse -d pulse"], interval: 3s, retries: 20 }
     restart: unless-stopped
 
