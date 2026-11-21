@@ -10,12 +10,12 @@ dependencies = [
     "django-filter==26.2",
     "django-cors-headers==4.9.0",
     "celery[redis]==5.7.0",
-    "psycopg[binary]==3.3.8",
+    "psycopg[binary]==3.3.9",
     "dj-database-url==3.1.2",
     "gunicorn==26.2.0",
     "whitenoise==6.12.0",
     "python-json-logger==4.2.0",
-    "sentry-sdk==2.74.0",
+    "sentry-sdk==2.75.0",
     "prometheus-client==0.26.0",
 ]
 
@@ -27,7 +27,7 @@ dev = [
     "factory-boy==3.3.3",
     "time-machine==3.6.0",
     "hypothesis==6.170.15",
-    "ruff==0.17.4",
+    "ruff==0.17.5",
     "mypy==2.4.1",
     "django-stubs[compatible-mypy]==6.1.2",
     "djangorestframework-stubs==3.18.2",
